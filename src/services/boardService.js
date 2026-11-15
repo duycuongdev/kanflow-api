@@ -16,14 +16,91 @@ import { kickUserFromBoard } from '~/sockets/boardSocket'
 
 const createNew = async (userId, reqBody) => {
   try {
+    const { template = 'kanban', ...boardPayload } = reqBody
     const newBoard = {
-      ...reqBody,
+      ...boardPayload,
       slug: slugify(reqBody.title)
     }
 
     const createBoard = await boardModel.createNew(userId, newBoard)
-    const getNewBoard = await boardModel.findOneById(createBoard.insertedId)
+    const boardId = createBoard.insertedId
 
+    if (template === 'kanban') {
+      await withTransaction(async (session) => {
+        // Tạo 3 cột mẫu chuẩn Kanban: To do, Doing, Done
+        const colTodoRes = await columnModel.createNew({
+          boardId: boardId.toString(),
+          title: 'To do'
+        }, { session })
+        const colDoingRes = await columnModel.createNew({
+          boardId: boardId.toString(),
+          title: 'Doing'
+        }, { session })
+        const colDoneRes = await columnModel.createNew({
+          boardId: boardId.toString(),
+          title: 'Done'
+        }, { session })
+
+        const colTodoId = colTodoRes.insertedId
+        const colDoingId = colDoingRes.insertedId
+        const colDoneId = colDoneRes.insertedId
+
+        // Tạo các thẻ mẫu thực tế kèm nhãn và checklist
+        const card1Res = await cardModel.createNew({
+          boardId: boardId.toString(),
+          columnId: colTodoId.toString(),
+          title: '👋 Chào mừng bạn! Kéo tôi sang cột Doing nhé',
+          description: 'Kéo thả (Drag and drop) là tính năng cốt lõi của Trello. Bạn có thể kéo thẻ này qua lại giữa các cột để cập nhật tiến độ.',
+          labels: [{ title: 'Bắt đầu', color: '#0052cc' }]
+        }, { session })
+
+        const card2Res = await cardModel.createNew({
+          boardId: boardId.toString(),
+          columnId: colTodoId.toString(),
+          title: '🎯 Nhấp vào đây để xem Checklist & Hạn chót',
+          description: 'Mỗi thẻ là một trung tâm công việc: bạn có thể chia nhỏ việc bằng Checklist, đặt hạn chót và thêm tệp đính kèm.',
+          labels: [{ title: 'Mẹo hay', color: '#16a34a' }],
+          checklists: [
+            {
+              title: 'Các bước làm quen',
+              items: [
+                { title: 'Khám phá giao diện Kanban', isDone: true },
+                { title: 'Thử đổi hình nền bảng', isDone: false },
+                { title: 'Tạo thẻ công việc đầu tiên của bạn', isDone: false }
+              ]
+            }
+          ]
+        }, { session })
+
+        const card3Res = await cardModel.createNew({
+          boardId: boardId.toString(),
+          columnId: colDoneId.toString(),
+          title: '🚀 Đã khởi tạo thành công không gian làm việc',
+          description: 'Bảng Kanban đã sẵn sàng. Chúc bạn làm việc hiệu quả và năng suất!',
+          labels: [{ title: 'Hoàn thành', color: '#10b981' }]
+        }, { session })
+
+        // Cập nhật cardOrderIds cho từng cột
+        await columnModel.update(colTodoId.toString(), {
+          cardOrderIds: [card1Res.insertedId.toString(), card2Res.insertedId.toString()]
+        }, { session })
+
+        await columnModel.update(colDoingId.toString(), {
+          cardOrderIds: []
+        }, { session })
+
+        await columnModel.update(colDoneId.toString(), {
+          cardOrderIds: [card3Res.insertedId.toString()]
+        }, { session })
+
+        // Cập nhật columnOrderIds cho board
+        await boardModel.update(boardId.toString(), {
+          columnOrderIds: [colTodoId.toString(), colDoingId.toString(), colDoneId.toString()]
+        }, { session })
+      })
+    }
+
+    const getNewBoard = await boardModel.findOneById(boardId)
     return getNewBoard
   } catch (error) { throw error }
 }
