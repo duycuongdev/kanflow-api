@@ -69,6 +69,13 @@ describe('boardValidation.createNew', () => {
     assert.equal(nextArg, undefined)
   })
 
+  test('title hợp lệ không có description -> next()', async () => {
+    const { nextArg } = await runMiddleware(boardValidation.createNew, {
+      body: { title: 'Board Without Desc', template: 'kanban' }
+    })
+    assert.equal(nextArg, undefined)
+  })
+
   test('title quá ngắn -> 422', async () => {
     const { nextArg } = await runMiddleware(boardValidation.createNew, {
       body: { title: 'ab', description: 'A board for testing' }

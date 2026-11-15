@@ -12,7 +12,7 @@ const createNew = async (req, res, next) => {
       'string.max': 'Title length must be less than or equal to 5 character long',
       'string.trim': 'Title must not have leading or trailing whitespace'
     }),
-    description: Joi.string().required().min(3).max(256).trim().strict(),
+    description: Joi.string().optional().allow('').max(256).trim().default(''),
     template: Joi.string().valid('kanban', 'blank').optional()
   })
 

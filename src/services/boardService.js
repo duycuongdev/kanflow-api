@@ -16,9 +16,10 @@ import { kickUserFromBoard } from '~/sockets/boardSocket'
 
 const createNew = async (userId, reqBody) => {
   try {
-    const { template = 'kanban', ...boardPayload } = reqBody
+    const { template = 'kanban', description = '', ...boardPayload } = reqBody
     const newBoard = {
       ...boardPayload,
+      description,
       slug: slugify(reqBody.title)
     }
 
