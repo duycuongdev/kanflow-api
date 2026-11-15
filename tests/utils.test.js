@@ -10,6 +10,7 @@ const { pagingSkipValue } = require('../build/src/utils/algorithms.js')
 const { OBJECT_ID_RULE, EMAIL_RULE, PASSWORD_RULE } = require('../build/src/utils/validators.js')
 const { slugify, pickUser } = require('../build/src/utils/formatter.js')
 const { mapOrder } = require('../build/src/utils/sorts.js')
+const { isRetryableTransactionError } = require('../build/src/utils/withTransaction.js')
 
 describe('pagingSkipValue (phân trang)', () => {
   test('trang 1 -> skip 0', () => {
@@ -97,3 +98,30 @@ describe('mapOrder (sắp xếp theo mảng thứ tự)', () => {
     assert.deepEqual(mapOrder(null, ['a'], '_id'), [])
   })
 })
+
+describe('isRetryableTransactionError (WriteConflict & transient retry)', () => {
+  test('nhận diện code 112 (WriteConflict)', () => {
+    const err = new Error('Some error')
+    err.code = 112
+    assert.equal(isRetryableTransactionError(err), true)
+  })
+
+  test('nhận diện message chứa "Write conflict"', () => {
+    const err = new Error('Write conflict during plan execution and yielding is disabled.')
+    assert.equal(isRetryableTransactionError(err), true)
+  })
+
+  test('nhận diện hasErrorLabel("TransientTransactionError")', () => {
+    const err = new Error('Transient network error')
+    err.hasErrorLabel = (label) => label === 'TransientTransactionError'
+    assert.equal(isRetryableTransactionError(err), true)
+  })
+
+  test('từ chối các lỗi thông thường khác', () => {
+    assert.equal(isRetryableTransactionError(null), false)
+    assert.equal(isRetryableTransactionError(undefined), false)
+    assert.equal(isRetryableTransactionError(new Error('Validation error')), false)
+    assert.equal(isRetryableTransactionError({ code: 11000 }), false)
+  })
+})
+
