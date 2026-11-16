@@ -2,14 +2,18 @@ import { env } from '~/config/environment'
 import ApiError from '~/utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 
-// Danh sách các model theo thứ tự ưu tiên (hỗ trợ tự động fallback khi Google cập nhật phiên bản)
+// Danh sách các model theo thứ tự ưu tiên:
+// 1. gemini-2.5-flash-lite: Tốc độ phản hồi cực nhanh (~1.2s), hạ tầng nhẹ, ít bị nghẽn tải cao (high demand)
+// 2. gemini-2.5-flash: Model cân bằng chất lượng & tốc độ
+// 3. gemini-flash-lite-latest: Pool dự phòng cho flash-lite
+// 4. gemini-3.5-flash: Model thế hệ tiếp theo
 const CANDIDATE_MODELS = [
+  'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
-  'gemini-flash-latest',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash'
+  'gemini-flash-lite-latest',
+  'gemini-3.5-flash'
 ]
-const REQUEST_TIMEOUT_MS = 30000
+const PER_MODEL_TIMEOUT_MS = 14000
 
 const generateBoardFromPrompt = async (prompt, customApiKey = '') => {
   const apiKey = (customApiKey || env.GEMINI_API_KEY || '').trim()
@@ -59,19 +63,17 @@ Respond in the language of the prompt (if Vietnamese, use Vietnamese; if English
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+        signal: AbortSignal.timeout(PER_MODEL_TIMEOUT_MS)
       })
 
       const data = await response.json()
 
+      // Bất kỳ lỗi nào (503 High Demand, 429 Rate Limit, 404 Not Found, 500...),
+      // ghi nhận và tự động fallback sang model tiếp theo trong danh sách
       if (!response.ok) {
         const errorMsg = data?.error?.message || response.statusText || 'Lỗi khi gọi Gemini API'
-        // Nếu lỗi 404 (model not found / deprecated), thử model tiếp theo trong danh sách candidate
-        if (response.status === 404 || errorMsg.includes('not found') || errorMsg.includes('not supported')) {
-          lastError = new ApiError(response.status, errorMsg)
-          continue
-        }
-        throw new ApiError(response.status || StatusCodes.INTERNAL_SERVER_ERROR, errorMsg)
+        lastError = new ApiError(response.status || StatusCodes.INTERNAL_SERVER_ERROR, errorMsg)
+        continue
       }
 
       const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text
@@ -82,7 +84,8 @@ Respond in the language of the prompt (if Vietnamese, use Vietnamese; if English
 
       const parsedBoard = JSON.parse(textContent)
       if (!parsedBoard.title || !Array.isArray(parsedBoard.columns)) {
-        throw new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, 'Dữ liệu AI sinh ra không đúng cấu trúc bảng Kanban.')
+        lastError = new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, 'Dữ liệu AI sinh ra không đúng cấu trúc bảng Kanban.')
+        continue
       }
 
       // Đảm bảo độ dài title không vượt quá 50 ký tự
@@ -92,15 +95,16 @@ Respond in the language of the prompt (if Vietnamese, use Vietnamese; if English
 
       return parsedBoard
     } catch (error) {
-      if (error instanceof ApiError && error.statusCode !== 404) {
-        throw error
-      }
+      // Khi model bị timeout hoặc network error, tiếp tục thử model tiếp theo
       lastError = error
     }
   }
 
   if (lastError instanceof ApiError) throw lastError
-  throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, lastError?.message || 'Không thể kết nối tới các model AI khả dụng.')
+  throw new ApiError(
+    StatusCodes.SERVICE_UNAVAILABLE,
+    lastError?.message || 'Hệ thống AI tạm thời bận hoặc gặp sự cố kết nối. Vui lòng thử lại sau giây lát.'
+  )
 }
 
 export const geminiProvider = {
