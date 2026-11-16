@@ -379,7 +379,6 @@ const importBoard = async (userId, reqBody) => {
     const newBoard = {
       title: title.trim(),
       description: description ? description.trim() : '',
-      type: 'private',
       slug: slugify(title)
     }
 

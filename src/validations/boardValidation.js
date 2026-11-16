@@ -84,8 +84,8 @@ const removeMember = async (req, res, next) => {
 
 const importBoard = async (req, res, next) => {
   const correctCondition = Joi.object({
-    title: Joi.string().required().min(1).max(100).trim().strict(),
-    description: Joi.string().optional().allow('').max(500).default(''),
+    title: Joi.string().required().min(3).max(50).trim().strict(),
+    description: Joi.string().optional().allow('').max(256).default(''),
     exportedAt: Joi.string().optional(),
     version: Joi.string().optional(),
     columns: Joi.array().items(
