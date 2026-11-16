@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import { slugify } from '~/utils/formatter'
 import { boardModel } from '~/models/boardModel'
 import { cloudinaryProvider } from '~/providers/CloudinaryProvider'
@@ -372,8 +373,83 @@ const deleteBoard = async (userId, boardId) => {
   } catch (error) { throw error }
 }
 
+const importBoard = async (userId, reqBody) => {
+  try {
+    const { title, description = '', columns = [] } = reqBody
+    const newBoard = {
+      title: title.trim(),
+      description: description ? description.trim() : '',
+      type: 'private',
+      slug: slugify(title)
+    }
+
+    const createBoard = await boardModel.createNew(userId, newBoard)
+    const boardId = createBoard.insertedId
+
+    if (Array.isArray(columns) && columns.length > 0) {
+      await withTransaction(async (session) => {
+        const columnOrderIds = []
+
+        for (const colData of columns) {
+          if (!colData.title) continue
+          const createdCol = await columnModel.createNew({
+            boardId: boardId.toString(),
+            title: colData.title.trim()
+          }, { session })
+          const colId = createdCol.insertedId
+          columnOrderIds.push(colId.toString())
+
+          const cardOrderIds = []
+          if (Array.isArray(colData.cards)) {
+            for (const cardData of colData.cards) {
+              if (!cardData.title) continue
+
+              // Format checklists với fresh UUIDs
+              const formattedChecklists = (Array.isArray(cardData.checklists) ? cardData.checklists : []).map(cl => ({
+                _id: randomUUID(),
+                title: cl.title || 'Checklist',
+                items: (Array.isArray(cl.items) ? cl.items : []).map(item => ({
+                  _id: randomUUID(),
+                  title: item.title || '',
+                  isDone: Boolean(item.isDone)
+                }))
+              }))
+
+              // Format labels
+              const formattedLabels = (Array.isArray(cardData.labels) ? cardData.labels : []).filter(l => l && l.color)
+
+              const createdCard = await cardModel.createNew({
+                boardId: boardId.toString(),
+                columnId: colId.toString(),
+                title: cardData.title.trim(),
+                description: cardData.description || '',
+                dueDate: cardData.dueDate ? Number(cardData.dueDate) : null,
+                isDueDateComplete: Boolean(cardData.isDueDateComplete),
+                labels: formattedLabels,
+                checklists: formattedChecklists
+              }, { session })
+
+              cardOrderIds.push(createdCard.insertedId.toString())
+            }
+          }
+
+          // Cập nhật cardOrderIds cho cột
+          await columnModel.update(colId.toString(), { cardOrderIds }, { session })
+        }
+
+        // Cập nhật columnOrderIds cho board
+        await boardModel.update(boardId.toString(), { columnOrderIds }, { session })
+      })
+    }
+
+    const getNewBoard = await boardModel.findOneById(boardId)
+    return getNewBoard
+  } catch (error) { throw error }
+}
+
 export const boardService = {
   createNew,
+  importBoard,
   getDetails,
   update,
   moveCardToDifferentColumn,

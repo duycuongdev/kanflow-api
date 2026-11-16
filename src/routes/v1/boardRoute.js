@@ -10,6 +10,9 @@ Router.route('/')
   .get(authMiddleware.isAuthorized, boardController.getBoards)
   .post(authMiddleware.isAuthorized, boardValidation.createNew, boardController.createNew)
 
+Router.route('/import')
+  .post(authMiddleware.isAuthorized, boardValidation.importBoard, boardController.importBoard)
+
 Router.route('/:id')
   .get(authMiddleware.isAuthorized, boardController.getDetails)
   .put(

@@ -34,6 +34,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  */
 export const withTransaction = async (operations, maxRetries = 3) => {
   let attempt = 0
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     attempt++
     const session = GET_DB().client.startSession()

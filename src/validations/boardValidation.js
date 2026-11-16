@@ -82,8 +82,55 @@ const removeMember = async (req, res, next) => {
   }
 }
 
+const importBoard = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    title: Joi.string().required().min(1).max(100).trim().strict(),
+    description: Joi.string().optional().allow('').max(500).default(''),
+    exportedAt: Joi.string().optional(),
+    version: Joi.string().optional(),
+    columns: Joi.array().items(
+      Joi.object({
+        title: Joi.string().required().trim(),
+        cards: Joi.array().items(
+          Joi.object({
+            title: Joi.string().required().trim(),
+            description: Joi.string().optional().allow(''),
+            dueDate: Joi.date().timestamp('javascript').allow(null).optional(),
+            isDueDateComplete: Joi.boolean().optional(),
+            labels: Joi.array().items(
+              Joi.object({
+                title: Joi.string().allow('').optional(),
+                color: Joi.string().required()
+              })
+            ).optional(),
+            checklists: Joi.array().items(
+              Joi.object({
+                title: Joi.string().required().trim(),
+                items: Joi.array().items(
+                  Joi.object({
+                    title: Joi.string().required().trim(),
+                    isDone: Joi.boolean().optional()
+                  }).unknown(true)
+                ).optional()
+              }).unknown(true)
+            ).optional()
+          }).unknown(true)
+        ).optional()
+      }).unknown(true)
+    ).optional().default([])
+  }).unknown(true)
+
+  try {
+    await correctCondition.validateAsync(req.body, { abortEarly: false })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
 export const boardValidation = {
   createNew,
+  importBoard,
   update,
   moveCardToDifferentColumn,
   removeMember

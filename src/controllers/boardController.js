@@ -102,8 +102,17 @@ const deleteBoard = async (req, res, next) => {
   } catch (error) { next(error) }
 }
 
+const importBoard = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const createdBoard = await boardService.importBoard(userId, req.body)
+    res.status(StatusCodes.CREATED).json(createdBoard)
+  } catch (error) { next(error) }
+}
+
 export const boardController = {
   createNew,
+  importBoard,
   getDetails,
   update,
   moveCardToDifferentColumn,
