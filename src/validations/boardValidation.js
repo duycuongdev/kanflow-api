@@ -128,9 +128,24 @@ const importBoard = async (req, res, next) => {
   }
 }
 
+const aiGenerate = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    prompt: Joi.string().required().min(5).max(1000).trim().strict(),
+    customApiKey: Joi.string().allow('', null).optional()
+  })
+
+  try {
+    await correctCondition.validateAsync(req.body, { abortEarly: false })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
 export const boardValidation = {
   createNew,
   importBoard,
+  aiGenerate,
   update,
   moveCardToDifferentColumn,
   removeMember

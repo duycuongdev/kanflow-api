@@ -13,6 +13,9 @@ Router.route('/')
 Router.route('/import')
   .post(authMiddleware.isAuthorized, boardValidation.importBoard, boardController.importBoard)
 
+Router.route('/ai-generate')
+  .post(authMiddleware.isAuthorized, boardValidation.aiGenerate, boardController.aiGenerate)
+
 Router.route('/:id')
   .get(authMiddleware.isAuthorized, boardController.getDetails)
   .put(

@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { slugify } from '~/utils/formatter'
 import { boardModel } from '~/models/boardModel'
 import { cloudinaryProvider } from '~/providers/CloudinaryProvider'
+import { geminiProvider } from '~/providers/geminiProvider'
 import ApiError from '~/utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 import { cloneDeep } from 'lodash'
@@ -446,9 +447,15 @@ const importBoard = async (userId, reqBody) => {
   } catch (error) { throw error }
 }
 
+const aiGenerate = async (userId, { prompt, customApiKey = '' }) => {
+  const generatedBoard = await geminiProvider.generateBoardFromPrompt(prompt, customApiKey)
+  return await importBoard(userId, generatedBoard)
+}
+
 export const boardService = {
   createNew,
   importBoard,
+  aiGenerate,
   getDetails,
   update,
   moveCardToDifferentColumn,

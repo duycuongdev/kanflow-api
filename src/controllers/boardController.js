@@ -110,9 +110,18 @@ const importBoard = async (req, res, next) => {
   } catch (error) { next(error) }
 }
 
+const aiGenerate = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const createdBoard = await boardService.aiGenerate(userId, req.body)
+    res.status(StatusCodes.CREATED).json(createdBoard)
+  } catch (error) { next(error) }
+}
+
 export const boardController = {
   createNew,
   importBoard,
+  aiGenerate,
   getDetails,
   update,
   moveCardToDifferentColumn,
