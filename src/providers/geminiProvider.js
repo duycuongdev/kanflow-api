@@ -2,8 +2,14 @@ import { env } from '~/config/environment'
 import ApiError from '~/utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
-const REQUEST_TIMEOUT_MS = 25000
+// Danh sách các model theo thứ tự ưu tiên (hỗ trợ tự động fallback khi Google cập nhật phiên bản)
+const CANDIDATE_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-flash-latest',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash'
+]
+const REQUEST_TIMEOUT_MS = 30000
 
 const generateBoardFromPrompt = async (prompt, customApiKey = '') => {
   const apiKey = (customApiKey || env.GEMINI_API_KEY || '').trim()
@@ -42,43 +48,59 @@ Respond in the language of the prompt (if Vietnamese, use Vietnamese; if English
     }
   }
 
-  try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-    })
+  let lastError = null
 
-    const data = await response.json()
+  for (const model of CANDIDATE_MODELS) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      })
 
-    if (!response.ok) {
-      const errorMsg = data?.error?.message || 'Lỗi khi gọi Gemini API'
-      throw new ApiError(response.status || StatusCodes.INTERNAL_SERVER_ERROR, errorMsg)
+      const data = await response.json()
+
+      if (!response.ok) {
+        const errorMsg = data?.error?.message || response.statusText || 'Lỗi khi gọi Gemini API'
+        // Nếu lỗi 404 (model not found / deprecated), thử model tiếp theo trong danh sách candidate
+        if (response.status === 404 || errorMsg.includes('not found') || errorMsg.includes('not supported')) {
+          lastError = new ApiError(response.status, errorMsg)
+          continue
+        }
+        throw new ApiError(response.status || StatusCodes.INTERNAL_SERVER_ERROR, errorMsg)
+      }
+
+      const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text
+      if (!textContent) {
+        lastError = new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Gemini không trả về nội dung hợp lệ.')
+        continue
+      }
+
+      const parsedBoard = JSON.parse(textContent)
+      if (!parsedBoard.title || !Array.isArray(parsedBoard.columns)) {
+        throw new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, 'Dữ liệu AI sinh ra không đúng cấu trúc bảng Kanban.')
+      }
+
+      // Đảm bảo độ dài title không vượt quá 50 ký tự
+      if (parsedBoard.title.length > 50) {
+        parsedBoard.title = parsedBoard.title.substring(0, 50).trim()
+      }
+
+      return parsedBoard
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode !== 404) {
+        throw error
+      }
+      lastError = error
     }
-
-    const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!textContent) {
-      throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Gemini không trả về nội dung hợp lệ.')
-    }
-
-    const parsedBoard = JSON.parse(textContent)
-    if (!parsedBoard.title || !Array.isArray(parsedBoard.columns)) {
-      throw new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, 'Dữ liệu AI sinh ra không đúng cấu trúc bảng Kanban.')
-    }
-
-    // Đảm bảo độ dài title không vượt quá 50 ký tự
-    if (parsedBoard.title.length > 50) {
-      parsedBoard.title = parsedBoard.title.substring(0, 50).trim()
-    }
-
-    return parsedBoard
-  } catch (error) {
-    if (error instanceof ApiError) throw error
-    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, error.message || 'Lỗi kết nối tới AI Provider.')
   }
+
+  if (lastError instanceof ApiError) throw lastError
+  throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, lastError?.message || 'Không thể kết nối tới các model AI khả dụng.')
 }
 
 export const geminiProvider = {
