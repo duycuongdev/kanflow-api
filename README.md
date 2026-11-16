@@ -1,4 +1,4 @@
-# ⚙️ Trello API - Backend RESTful Services & Real-Time Socket Engine
+# ⚙️ Kanflow API - Backend RESTful Services & Real-Time Socket Engine
 
 [![Node.js](https://img.shields.io/badge/Node.js-18.x-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Express.js](https://img.shields.io/badge/Express.js-4.x-000000?logo=express&logoColor=white)](https://expressjs.com/)
@@ -8,7 +8,7 @@
 [![Brevo](https://img.shields.io/badge/Brevo-Transactional%20Email-0092FF?logo=sendinblue&logoColor=white)](https://www.brevo.com/)
 [![Render](https://img.shields.io/badge/Deployed%20on-Render-46E3B7?logo=render&logoColor=white)](https://trello-api-5hh5.onrender.com)
 
-> Robust **Backend RESTful API** and **Real-Time WebSocket Engine** powering the Trello platform. Provides a secure, scalable, and high-performance service architecture designed for seamless team collaboration.
+> Robust **Backend RESTful API** and **Real-Time WebSocket Engine** powering the Kanflow platform. Provides a secure, scalable, and high-performance service architecture designed for seamless team collaboration.
 
 ---
 
