@@ -21,7 +21,7 @@ Router.get('/docs.json', (req, res) => {
   res.status(StatusCodes.OK).json(openApiSpec)
 })
 Router.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, {
-  customSiteTitle: 'Trello Clone API Docs',
+  customSiteTitle: 'Trello API Docs',
   customCss: '.swagger-ui .topbar { display: none }'
 }))
 

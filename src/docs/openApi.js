@@ -33,7 +33,7 @@ const errorResponse = (description) => ({
 export const openApiSpec = {
   openapi: '3.0.3',
   info: {
-    title: 'Trello Clone API',
+    title: 'Trello API',
     version: '1.0.0',
     description: [
       '**Kanban project management API** (MERN + Socket.IO real-time).',
