@@ -6,6 +6,7 @@ import { columnRouter } from './columnRouter'
 import { cardRouter } from './cardRouter'
 import { userRoute } from './userRoute'
 import { invitationRoute } from './invitationRoute'
+import { aiRouter } from './aiRoute'
 import { GET_DB } from '~/config/mongodb'
 import { openApiSpec } from '~/docs/openApi'
 
@@ -64,5 +65,8 @@ Router.use('/users', userRoute )
 
 // invitation api
 Router.use('/invitations', invitationRoute )
+
+// AI Copilot api
+Router.use('/ai', aiRouter)
 
 export const APIs_V1 = Router

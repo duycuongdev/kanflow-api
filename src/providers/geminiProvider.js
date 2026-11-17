@@ -107,6 +107,171 @@ Respond in the language of the prompt (if Vietnamese, use Vietnamese; if English
   )
 }
 
+const chatWithCopilot = async ({
+  message,
+  history = [],
+  boardContext = null,
+  language = 'vi',
+  customApiKey = ''
+}) => {
+  const apiKey = (customApiKey || env.GEMINI_API_KEY || '').trim()
+
+  if (!apiKey) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'Chưa cấu hình GEMINI_API_KEY. Vui lòng thêm GEMINI_API_KEY vào .env hoặc cung cấp API Key cá nhân.'
+    )
+  }
+
+  const langDirective = language === 'vi'
+    ? 'The user interface is in Vietnamese. Default your response message and any generated board/column/card titles and descriptions to Vietnamese, unless the user specifically asks in English or another language.'
+    : 'The user interface is in English. Default your response message and any generated board/column/card titles and descriptions to English, unless the user specifically asks in another language.'
+
+  let boardContextText = ''
+  if (boardContext && boardContext.title) {
+    const colsSummary = (boardContext.columns || []).map(col => {
+      const cardsList = (col.cards || []).slice(0, 10).map(card => card.title).join(', ')
+      return `Column "${col.title}" (id: "${col._id}"): [${cardsList || 'No cards'}]`
+    }).join('\n')
+
+    boardContextText = `
+CURRENT ACTIVE BOARD:
+- Board ID: "${boardContext._id}"
+- Board Title: "${boardContext.title}"
+- Description: "${boardContext.description || 'None'}"
+- Columns & Tasks:
+${colsSummary || 'No columns'}
+`
+  }
+
+  const systemInstruction = `You are Kanflow Copilot, an intelligent AI Assistant and Project Manager built into Kanflow (a real-time Kanban & Agile collaboration platform).
+Your mission is to help users manage their workspaces, design boards, plan agile workflows, add cards, suggest tasks, summarize progress, and answer productivity questions.
+
+Language Guidelines:
+${langDirective}
+
+Capabilities & Actions:
+1. "CREATE_BOARD": When user asks to generate, create, or plan a new board/project/workflow.
+   payload: {
+     "title": "descriptive board title (max 50 chars)",
+     "description": "brief board description",
+     "columns": [
+       {
+         "title": "Column title",
+         "cards": [
+           {
+             "title": "Task title (max 60 chars)",
+             "description": "Clear explanation or instructions in markdown",
+             "labels": [{ "title": "Tag name", "color": "#hex" }],
+             "checklists": [{ "title": "Checklist", "items": [{ "title": "Subtask", "isDone": false }] }]
+           }
+         ]
+       }
+     ]
+   }
+2. "CREATE_COLUMN": When user asks to add a column/stage/list to the current active board (ONLY if CURRENT ACTIVE BOARD is present).
+   payload: {
+     "boardId": "${boardContext?._id || ''}",
+     "title": "Column title"
+   }
+3. "CREATE_CARD": When user asks to create or add a card/task to the current active board (ONLY if CURRENT ACTIVE BOARD is present).
+   payload: {
+     "boardId": "${boardContext?._id || ''}",
+     "columnId": "matching column _id from current active board, or leave empty/null if user didn't specify",
+     "title": "Task title",
+     "description": "Task description in markdown",
+     "labels": [{ "title": "Tag name", "color": "#hex" }],
+     "checklists": [{ "title": "Checklist", "items": [{ "title": "Subtask", "isDone": false }] }]
+   }
+4. General Conversation / Advice / Task Breakdown / Summary:
+   When user asks a question, requests advice, says hi, or wants a summary.
+   "action": null, "payload": null.
+
+Output Rules:
+You MUST ALWAYS respond with valid JSON matching this schema:
+{
+  "message": "Friendly, helpful markdown response to display to the user in chat",
+  "action": null | "CREATE_BOARD" | "CREATE_COLUMN" | "CREATE_CARD",
+  "payload": null | object
+}`
+
+  const contents = []
+
+  if (Array.isArray(history) && history.length > 0) {
+    const recentHistory = history.slice(-6)
+    for (const h of recentHistory) {
+      if (h.role && h.content) {
+        contents.push({
+          role: h.role === 'assistant' || h.role === 'model' ? 'model' : 'user',
+          parts: [{ text: typeof h.content === 'string' ? h.content : JSON.stringify(h.content) }]
+        })
+      }
+    }
+  }
+
+  const currentTurnText = `${systemInstruction}\n${boardContextText}\nUser Message: ${message}`
+  contents.push({
+    role: 'user',
+    parts: [{ text: currentTurnText }]
+  })
+
+  const requestBody = {
+    contents,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.7
+    }
+  }
+
+  let lastError = null
+
+  for (const model of CANDIDATE_MODELS) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(PER_MODEL_TIMEOUT_MS)
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        const errorMsg = data?.error?.message || response.statusText || 'Lỗi khi gọi Gemini API'
+        lastError = new ApiError(response.status || StatusCodes.INTERNAL_SERVER_ERROR, errorMsg)
+        continue
+      }
+
+      const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text
+      if (!textContent) {
+        lastError = new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Gemini không trả về nội dung hợp lệ.')
+        continue
+      }
+
+      const parsedResult = JSON.parse(textContent)
+      if (!parsedResult.message) {
+        parsedResult.message = language === 'vi'
+          ? 'Tôi đã tiếp nhận yêu cầu của bạn.'
+          : 'I have received your request.'
+      }
+
+      return parsedResult
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  if (lastError instanceof ApiError) throw lastError
+  throw new ApiError(
+    StatusCodes.SERVICE_UNAVAILABLE,
+    lastError?.message || 'Kanflow Copilot tạm thời bận hoặc gặp sự cố kết nối. Vui lòng thử lại sau giây lát.'
+  )
+}
+
 export const geminiProvider = {
-  generateBoardFromPrompt
+  generateBoardFromPrompt,
+  chatWithCopilot
 }

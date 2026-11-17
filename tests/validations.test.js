@@ -7,6 +7,7 @@ const assert = require('node:assert/strict')
 
 const { userValidation } = require('../build/src/validations/userValidation.js')
 const { boardValidation } = require('../build/src/validations/boardValidation.js')
+const { aiValidation } = require('../build/src/validations/aiValidation.js')
 
 const mockRes = () => {
   const res = {}
@@ -105,3 +106,36 @@ describe('boardValidation.moveCardToDifferentColumn', () => {
     assert.equal(nextArg.statusCode, 422)
   })
 })
+
+describe('aiValidation.chat', () => {
+  test('message hợp lệ -> next()', async () => {
+    const { nextArg } = await runMiddleware(aiValidation.chat, {
+      body: {
+        message: 'Tạo giúp tôi bảng quản lý dự án',
+        language: 'vi'
+      }
+    })
+    assert.equal(nextArg, undefined)
+  })
+
+  test('thiếu message -> 422', async () => {
+    const { nextArg } = await runMiddleware(aiValidation.chat, {
+      body: {
+        language: 'vi'
+      }
+    })
+    assert.ok(nextArg)
+    assert.equal(nextArg.statusCode, 422)
+  })
+
+  test('message rỗng -> 422', async () => {
+    const { nextArg } = await runMiddleware(aiValidation.chat, {
+      body: {
+        message: '   '
+      }
+    })
+    assert.ok(nextArg)
+    assert.equal(nextArg.statusCode, 422)
+  })
+})
+
