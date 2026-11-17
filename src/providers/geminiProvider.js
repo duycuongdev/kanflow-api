@@ -144,7 +144,7 @@ ${colsSummary || 'No columns'}
 `
   }
 
-  const systemInstruction = `You are Kanflow Copilot, an intelligent AI Assistant and Project Manager built into Kanflow (a real-time Kanban & Agile collaboration platform).
+  const systemInstruction = `You are Kanflow Assistant, an intelligent AI Assistant and Project Manager built into Kanflow (a real-time Kanban & Agile collaboration platform).
 Your mission is to help users manage their workspaces, design boards, plan agile workflows, add cards, suggest tasks, summarize progress, and answer productivity questions.
 
 Language Guidelines:
@@ -267,7 +267,7 @@ You MUST ALWAYS respond with valid JSON matching this schema:
   if (lastError instanceof ApiError) throw lastError
   throw new ApiError(
     StatusCodes.SERVICE_UNAVAILABLE,
-    lastError?.message || 'Kanflow Copilot tạm thời bận hoặc gặp sự cố kết nối. Vui lòng thử lại sau giây lát.'
+    lastError?.message || 'Kanflow Assistant tạm thời bận hoặc gặp sự cố kết nối. Vui lòng thử lại sau giây lát.'
   )
 }
 

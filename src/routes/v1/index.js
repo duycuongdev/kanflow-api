@@ -66,7 +66,7 @@ Router.use('/users', userRoute )
 // invitation api
 Router.use('/invitations', invitationRoute )
 
-// AI Copilot api
+// AI Assistant api
 Router.use('/ai', aiRouter)
 
 export const APIs_V1 = Router
