@@ -1,46 +1,51 @@
-# ⚙️ Kanflow API - Backend RESTful Services & Real-Time Socket Engine
+# ⚙️ Kanflow API - Backend RESTful Services, AI Engine & Real-Time Socket Engine
 
 [![Node.js](https://img.shields.io/badge/Node.js-18.x-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Express.js](https://img.shields.io/badge/Express.js-4.x-000000?logo=express&logoColor=white)](https://expressjs.com/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-Native%20Driver-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-2.5%20Flash%20Lite-4285F4?logo=googlegemini&logoColor=white)](https://ai.google.dev/)
 [![Socket.IO](https://img.shields.io/badge/Socket.io-4.x-010101?logo=socket.io&logoColor=white)](https://socket.io/)
+[![Tests](https://img.shields.io/badge/Tests-51%20passing-9B7EBD?logo=node.js&logoColor=white)](./tests/)
 [![Cloudinary](https://img.shields.io/badge/Cloudinary-Media%20Storage-3448C5?logo=cloudinary&logoColor=white)](https://cloudinary.com/)
 [![Brevo](https://img.shields.io/badge/Brevo-Transactional%20Email-0092FF?logo=sendinblue&logoColor=white)](https://www.brevo.com/)
 [![Render](https://img.shields.io/badge/Deployed%20on-Render-46E3B7?logo=render&logoColor=white)](https://trello-api-5hh5.onrender.com)
 
-> Robust **Backend RESTful API** and **Real-Time WebSocket Engine** powering the Kanflow platform. Provides a secure, scalable, and high-performance service architecture designed for seamless team collaboration.
+> Robust **Backend RESTful API**, **AI Copilot Engine**, and **Real-Time WebSocket Server** powering the Kanflow platform. Provides a secure, scalable, and high-performance service architecture designed for seamless team collaboration.
 
 ---
 
 ## 🌐 Live Client & Application
 
 - 🖥️ **Web Application**: [https://trello-web-tawny.vercel.app](https://trello-web-tawny.vercel.app)
-- 🐢 Hosted on Render free tier — **the first request may take ~30s to wake up** (subsequent requests are fast).
-- ⚡ **`POST /v1/users/guest_login`** — one-click demo login powering the frontend **"Try as Guest"** button: creates/reuses the shared `guest@duycuong.dev` account (no email verification step), issues a standard JWT pair with HttpOnly cookies, rate-limited per IP.
+- 📚 **Swagger API Docs**: `GET /v1/docs` (OpenAPI 3.0 spec at `/v1/docs.json`)
 
 ---
 
 ## ⚡ Key Backend Modules
 
-1. **Dual-Auth Authentication & Authorization**:
+1. **Kanflow Assistant AI Engine (Google Gemini 2.5 Flash Lite)**:
+   - Powers the in-app AI Copilot (`POST /v1/ai/chat`) with real-time **Board Context Injection** and bilingual support (English / Vietnamese).
+   - Executes **Structured Actions (Function Calling)** to automatically scaffold full boards, add columns, and create cards.
+   - Engineered with a **Multi-Model Resilient Fallback Pool** to handle high-demand 503/429 spikes seamlessly.
+2. **Dual-Auth Authentication & Authorization**:
    - Automatically detects tokens from both **HttpOnly Cookies** (`accessToken`) and HTTP Request Headers (`Authorization: Bearer <token>`).
-   - Implements **Refresh Token Rotation**: seamlessly issues new token pairs upon expiration, supporting custom `x-refresh-token` headers.
+   - Implements **Refresh Token Rotation**: single-use tokens with reuse detection that revokes the entire session.
    - Eliminates third-party cookie blocking issues across iOS Safari / Mobile ITP.
    - Server-side verification of Google OAuth 2.0 tokens using `google-auth-library`.
-2. **Real-Time Synchronization (Socket.IO)**:
+3. **Real-Time Synchronization (Socket.IO)**:
    - Dynamic room management keyed by Board ID (`board:<boardId>`).
    - Broadcasts real-time events: column drag-and-drop, card movements, content updates, invitations, and deadline alerts.
-3. **Board & Kanban Data Management**:
+4. **Board & Kanban Data Management**:
    - Hierarchical data architecture: **Board -> Columns -> Cards**.
    - Ordered array tracking (`columnOrderIds`, `cardOrderIds`).
-   - Secure and optimized cross-column card drag transactions.
-4. **Invitations & Deadline Reminders Aggregation**:
+   - Atomic cross-column card moves using **MongoDB multi-document transactions** with transient retry handling.
+5. **Invitations & Deadline Reminders Aggregation**:
    - High-performance MongoDB Aggregation Pipeline combining:
      - Board collaboration invites (`BOARD_INVITATION`).
      - Approaching and overdue task deadlines assigned to the current user (`CARD_DEADLINE`).
-5. **Media Storage & Transactional Communication**:
+6. **Media Storage & Transactional Communication**:
    - Direct attachments and card cover uploads to Cloudinary via Multer memory storage.
-   - User account activation emails dispatched via Brevo RESTful Transactional Email API.
+   - User account activation and password reset emails dispatched via Brevo RESTful Transactional Email API.
 
 ---
 
@@ -51,20 +56,22 @@ trello-api/
 ├── src/
 │   ├── config/               # Environment (environment.js, cors.js, mongodb.js, cloudinary.js)
 │   ├── controllers/          # HTTP request handlers
+│   │   ├── aiController.js
 │   │   ├── boardController.js
 │   │   ├── cardController.js
 │   │   ├── columnController.js
 │   │   ├── invitationController.js
 │   │   └── userController.js
-│   ├── middlewares/          # Auth middleware (Dual-auth), multer, error handler
+│   ├── middlewares/          # Auth middleware (Dual-auth), multer, rate limiter, error handler
 │   ├── models/               # MongoDB Data Access Layer & Joi Schemas
-│   ├── providers/            # Brevo Email Provider, Cloudinary Provider
-│   ├── routes/v1/            # RESTful API v1 router definitions
+│   ├── providers/            # Brevo Email Provider, Cloudinary Provider, Gemini AI Provider
+│   ├── routes/v1/            # RESTful API v1 router definitions (42+ endpoints)
 │   ├── services/             # Core business logic services
 │   ├── sockets/              # Socket.IO Event Handlers
 │   ├── utils/                # Algorithms, formatters, JWT generators
 │   ├── validations/          # Joi Request Validation Schemas
 │   └── server.js             # Express Server & Socket.IO initialization
+├── tests/                    # 51 automated unit & integration tests (node --test)
 ├── .env.example
 ├── package.json
 └── README.md
@@ -109,6 +116,8 @@ REFRESH_TOKEN_LIFE=14d
 CLOUDINARY_CLOUD_NAME=your_cloudinary_name
 CLOUDINARY_API_KEY=your_cloudinary_key
 CLOUDINARY_API_SECRET=your_cloudinary_secret
+
+GEMINI_API_KEY=your_google_gemini_api_key
 ```
 
 Start the server:
@@ -123,13 +132,13 @@ npm run build
 npm run start
 ```
 
-Run tests (unit tests for utils & validation middlewares — requires `npm run build` first):
+Run tests (51 unit & integration tests — requires `npm run build` first):
 ```bash
 npm run build
 npm test
 ```
 
-Seed the demo workspace (guest account + realistic "Website Redesign — Launch Plan" board):
+Seed the demo workspace (demo account + realistic "Website Redesign — Launch Plan" board):
 ```bash
 node scripts/seed-demo-board.mjs                 # local backend on :1900
 API_ROOT=https://trello-api-5hh5.onrender.com node scripts/seed-demo-board.mjs
