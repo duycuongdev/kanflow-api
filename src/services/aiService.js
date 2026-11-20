@@ -3,7 +3,7 @@ import { boardService } from '~/services/boardService'
 import { columnService } from '~/services/columnService'
 import { cardService } from '~/services/cardService'
 
-const chat = async (userId, { message, history = [], currentBoardId = null, language = 'vi', customApiKey = '' }) => {
+const chat = async (userId, { message, history = [], currentBoardId = null, language = 'vi', customApiKey = '', attachments = [] }) => {
   let boardContext = null
   if (currentBoardId) {
     try {
@@ -18,7 +18,8 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
     history,
     boardContext,
     language,
-    customApiKey
+    customApiKey,
+    attachments
   })
 
   let actionResult = null

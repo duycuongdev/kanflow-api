@@ -112,7 +112,8 @@ const chatWithCopilot = async ({
   history = [],
   boardContext = null,
   language = 'vi',
-  customApiKey = ''
+  customApiKey = '',
+  attachments = []
 }) => {
   const apiKey = (customApiKey || env.GEMINI_API_KEY || '').trim()
 
@@ -149,6 +150,9 @@ Your mission is to help users manage their workspaces, design boards, plan agile
 
 Language Guidelines:
 ${langDirective}
+
+Multimodal & Image Guidelines:
+Users can attach or paste images (screenshots, wireframes, diagrams, bug reports). If the user provides an image or attachment, inspect it thoroughly to answer questions, analyze workflows, describe tasks, or suggest boards/columns/cards.
 
 Capabilities & Actions:
 1. "CREATE_BOARD": When user asks to generate, create, or plan a new board/project/workflow.
@@ -210,9 +214,24 @@ You MUST ALWAYS respond with valid JSON matching this schema:
   }
 
   const currentTurnText = `${systemInstruction}\n${boardContextText}\nUser Message: ${message}`
+  const userParts = [{ text: currentTurnText }]
+
+  if (Array.isArray(attachments)) {
+    for (const att of attachments) {
+      if (att?.mimeType && att?.base64) {
+        userParts.push({
+          inlineData: {
+            mimeType: att.mimeType,
+            data: att.base64
+          }
+        })
+      }
+    }
+  }
+
   contents.push({
     role: 'user',
-    parts: [{ text: currentTurnText }]
+    parts: userParts
   })
 
   const requestBody = {

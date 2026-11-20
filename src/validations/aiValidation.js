@@ -8,12 +8,27 @@ const chat = async (req, res, next) => {
     history: Joi.array().items(
       Joi.object({
         role: Joi.string().valid('user', 'assistant', 'model').required(),
-        content: Joi.string().allow('').required()
+        content: Joi.string().allow('').required(),
+        attachments: Joi.array().items(
+          Joi.object({
+            name: Joi.string().allow('', null).optional(),
+            mimeType: Joi.string().allow('', null).optional(),
+            dataUrl: Joi.string().allow('', null).optional()
+          })
+        ).optional()
       })
     ).optional(),
     currentBoardId: Joi.string().allow('', null).optional(),
     language: Joi.string().valid('vi', 'en').default('vi').optional(),
-    customApiKey: Joi.string().allow('', null).optional()
+    customApiKey: Joi.string().allow('', null).optional(),
+    attachments: Joi.array().items(
+      Joi.object({
+        name: Joi.string().allow('', null).optional(),
+        mimeType: Joi.string().required(),
+        base64: Joi.string().allow('', null).optional(),
+        dataUrl: Joi.string().allow('', null).optional()
+      })
+    ).max(5).optional()
   })
 
   try {
