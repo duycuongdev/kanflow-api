@@ -16,7 +16,7 @@
 
 ## 🌐 Live Client & Application
 
-- 🖥️ **Web Application**: [https://trello-web-tawny.vercel.app](https://trello-web-tawny.vercel.app)
+- 🖥️ **Web Application**: [https://kanflow-smart.vercel.app](https://kanflow-smart.vercel.app)
 - 📚 **Swagger API Docs**: `GET /v1/docs` (OpenAPI 3.0 spec at `/v1/docs.json`)
 
 ---
@@ -102,7 +102,7 @@ AUTHOR=Duy Cuong
 BUILD_MODE=dev
 
 WEBSITE_DOMAIN_DEVELOPMENT=http://localhost:5173
-WEBSITE_DOMAIN_PRODUCTION=https://trello-web-tawny.vercel.app
+WEBSITE_DOMAIN_PRODUCTION=https://kanflow-smart.vercel.app
 
 BREVO_API_KEY=your_brevo_api_key
 ADMIN_EMAIL_ADDRESS=your_email@example.com
