@@ -63,10 +63,23 @@ const passwordResetLimiter = rateLimit({
   legacyHeaders: false
 })
 
+// 6. Giới hạn log phiên focus: tối đa 60 phiên trong 15 phút trên mỗi IP (mỗi phiên tối thiểu 1 phút nên 60 là dư dả)
+const focusLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  statusCode: StatusCodes.TOO_MANY_REQUESTS,
+  message: {
+    message: 'Too many focus sessions logged from this IP. Please slow down.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+})
+
 export const rateLimiterMiddleware = {
   loginLimiter,
   registerLimiter,
   invitationLimiter,
   passwordResetLimiter,
+  focusLimiter,
   apiLimiter
 }

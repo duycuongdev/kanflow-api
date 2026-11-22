@@ -51,7 +51,8 @@ export const openApiSpec = {
     { name: 'Boards', description: 'Board và thành viên' },
     { name: 'Columns', description: 'Column trong board' },
     { name: 'Cards', description: 'Card, comment, attachment, checklist' },
-    { name: 'Invitations', description: 'Lời mời tham gia board' }
+    { name: 'Invitations', description: 'Lời mời tham gia board' },
+    { name: 'Focus Sessions', description: 'Phiên focus (pomodoro): thống kê năng suất + bảng xếp hạng' }
   ],
   components: {
     securitySchemes: { bearerAuth, cookieAuth },
@@ -454,6 +455,37 @@ export const openApiSpec = {
         parameters: [idParam('invitationId')],
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['status'], properties: { status: { type: 'string', enum: ['ACCEPTED', 'REJECTED'] } } } } } },
         responses: { 200: okResponse('Lời mời đã cập nhật', { $ref: '#/components/schemas/Invitation' }), 403: errorResponse('Chỉ invitee được thao tác') }
+      }
+    },
+
+    '/v1/focus-sessions': {
+      post: {
+        tags: ['Focus Sessions'], summary: 'Log 1 phiên focus khi kết thúc (duration 1 phút - 4 giờ, server tự tính durationMs)',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['startedAt', 'endedAt'], properties: { startedAt: { type: 'integer', description: 'Epoch ms' }, endedAt: { type: 'integer', description: 'Epoch ms' }, cardId: { type: 'string' }, boardId: { type: 'string' } } } } } },
+        responses: { 201: okResponse('Phiên focus đã được ghi nhận'), 400: errorResponse('Phiên focus bắt đầu trong tương lai'), 422: errorResponse('startedAt/endedAt không hợp lệ hoặc thời lượng ngoài 1 phút - 4 giờ'), 429: errorResponse('Quá 60 phiên/15 phút') }
+      }
+    },
+    '/v1/focus-sessions/stats': {
+      get: {
+        tags: ['Focus Sessions'], summary: 'Tổng thời gian focus + số phiên của user hiện tại trong khoảng from/to (epoch ms, tính theo giờ máy của client)',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        parameters: [
+          { name: 'from', in: 'query', required: true, schema: { type: 'integer' } },
+          { name: 'to', in: 'query', required: true, schema: { type: 'integer' } }
+        ],
+        responses: { 200: okResponse('{ totalMs, sessionCount }'), 422: errorResponse('from/to không hợp lệ (range tối đa 400 ngày)') }
+      }
+    },
+    '/v1/focus-sessions/leaderboard': {
+      get: {
+        tags: ['Focus Sessions'], summary: 'Bảng xếp hạng focus toàn bộ user trong khoảng from/to (top 10 + hạng của user hiện tại)',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        parameters: [
+          { name: 'from', in: 'query', required: true, schema: { type: 'integer' } },
+          { name: 'to', in: 'query', required: true, schema: { type: 'integer' } }
+        ],
+        responses: { 200: okResponse('{ top: [...], me: {...}, totalRankedUsers }'), 422: errorResponse('from/to không hợp lệ') }
       }
     }
   }

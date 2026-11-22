@@ -82,11 +82,24 @@ const deleteOneById = async (userId) => {
   } catch (error) { throw new Error(error) }
 }
 
+// Lấy nhiều user theo danh sách ObjectId (dùng cho leaderboard, mention, ... - loại bỏ user đã bị destroy)
+const findManyByIds = async (userIds) => {
+  try {
+    const objectIds = userIds.map(id => new ObjectId(id))
+    const result = await GET_DB().collection(USER_COLLECTION_NAME).find({
+      _id: { $in: objectIds },
+      _destroy: false
+    }).toArray()
+    return result
+  } catch (error) { throw new Error(error) }
+}
+
 export const userModel = {
   USER_COLLECTION_NAME,
   createNew,
   findOneById,
   findOneByEmail,
   update,
-  deleteOneById
+  deleteOneById,
+  findManyByIds
 }

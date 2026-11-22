@@ -56,6 +56,13 @@ const INDEX_DEFINITIONS = [
       // TTL index: MongoDB tự động xóa document khi quá expiresAt
       { key: { expiresAt: 1 }, expireAfterSeconds: 0, name: 'ttl_expiresAt' }
     ]
+  },
+  {
+    collection: 'focus_sessions',
+    indexes: [
+      { key: { userId: 1, startedAt: -1 }, name: 'idx_userId_startedAt' },
+      { key: { startedAt: -1 }, name: 'idx_startedAt' }
+    ]
   }
 ]
 
