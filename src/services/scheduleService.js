@@ -35,7 +35,11 @@ const createNewEntry = async (reqBody, userId) => {
       cardId: reqBody.cardId || null,
       boardId: reqBody.boardId || null,
       cardTitle: reqBody.cardTitle || null,
-      boardTitle: reqBody.boardTitle || null
+      boardTitle: reqBody.boardTitle || null,
+      checklistId: reqBody.checklistId || null,
+      checklistItemId: reqBody.checklistItemId || null,
+      checklistTitle: reqBody.checklistTitle || null,
+      itemTitle: reqBody.itemTitle || null
     }
 
     const createdEntry = await scheduleModel.createNew(newEntryData)

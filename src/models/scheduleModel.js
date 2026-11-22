@@ -30,6 +30,13 @@ const SCHEDULE_COLLECTION_SCHEMA = Joi.object({
   cardTitle: Joi.string().optional().allow(null, '').max(200).trim().strict(),
   boardTitle: Joi.string().optional().allow(null, '').max(200).trim().strict(),
 
+  // Gắn sâu tới checklist / từng item checklist của card (optional)
+  // Lưu ý: checklist/item dùng UUID (crypto.randomUUID()) tạo phía FE, KHÔNG phải ObjectId
+  checklistId: Joi.string().optional().allow(null, '').max(64).trim().strict(),
+  checklistItemId: Joi.string().optional().allow(null, '').max(64).trim().strict(),
+  checklistTitle: Joi.string().optional().allow(null, '').max(200).trim().strict(),
+  itemTitle: Joi.string().optional().allow(null, '').max(200).trim().strict(),
+
   createdAt: Joi.date().timestamp('javascript').default(Date.now),
   updatedAt: Joi.date().timestamp('javascript').default(null),
   _destroy: Joi.boolean().default(false)

@@ -492,7 +492,7 @@ export const openApiSpec = {
 
     '/v1/schedules': {
       get: {
-        tags: ['Schedules'], summary: 'Entry lịch của user giao với khoảng from/to (epoch ms, range tối đa 35 ngày)',
+        tags: ['Schedules'], summary: 'Entry lịch của user giao với khoảng from/to (epoch ms, range tối đa 400 ngày)',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         parameters: [
           { name: 'from', in: 'query', required: true, schema: { type: 'integer' } },

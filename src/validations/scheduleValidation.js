@@ -7,8 +7,8 @@ import { SCHEDULE_ENTRY_COLORS } from '~/utils/constants'
 // 1 entry lịch không vượt quá 24 giờ
 const MAX_ENTRY_SPAN_MS = 24 * 60 * 60 * 1000
 
-// Query range tối đa 35 ngày (đủ cho view tuần + đệm)
-const MAX_RANGE_MS = 35 * 24 * 60 * 60 * 1000
+// Query range tối đa 400 ngày (đủ cho cả view năm)
+const MAX_RANGE_MS = 400 * 24 * 60 * 60 * 1000
 
 const createNew = async (req, res, next) => {
   const correctCondition = Joi.object({
@@ -23,7 +23,12 @@ const createNew = async (req, res, next) => {
     cardId: Joi.string().optional().allow(null).pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
     boardId: Joi.string().optional().allow(null).pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
     cardTitle: Joi.string().optional().allow(null, '').max(200).trim().strict(),
-    boardTitle: Joi.string().optional().allow(null, '').max(200).trim().strict()
+    boardTitle: Joi.string().optional().allow(null, '').max(200).trim().strict(),
+    // checklist/item dùng UUID phía FE (không phải ObjectId) nên chỉ giới hạn độ dài
+    checklistId: Joi.string().optional().allow(null, '').max(64).trim().strict(),
+    checklistItemId: Joi.string().optional().allow(null, '').max(64).trim().strict(),
+    checklistTitle: Joi.string().optional().allow(null, '').max(200).trim().strict(),
+    itemTitle: Joi.string().optional().allow(null, '').max(200).trim().strict()
   })
 
   try {
@@ -59,7 +64,11 @@ const updateEntry = async (req, res, next) => {
     cardId: Joi.string().optional().allow(null).pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
     boardId: Joi.string().optional().allow(null).pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
     cardTitle: Joi.string().optional().allow(null, '').max(200).trim().strict(),
-    boardTitle: Joi.string().optional().allow(null, '').max(200).trim().strict()
+    boardTitle: Joi.string().optional().allow(null, '').max(200).trim().strict(),
+    checklistId: Joi.string().optional().allow(null, '').max(64).trim().strict(),
+    checklistItemId: Joi.string().optional().allow(null, '').max(64).trim().strict(),
+    checklistTitle: Joi.string().optional().allow(null, '').max(200).trim().strict(),
+    itemTitle: Joi.string().optional().allow(null, '').max(200).trim().strict()
   }).min(1)
 
   try {
@@ -108,7 +117,7 @@ const rangeQuery = async (req, res, next) => {
       throw new Error('"to" must be greater than "from"')
     }
     if (query.to - query.from > MAX_RANGE_MS) {
-      throw new Error('Date range cannot exceed 35 days')
+      throw new Error('Date range cannot exceed 400 days')
     }
 
     next()
