@@ -63,6 +63,12 @@ const INDEX_DEFINITIONS = [
       { key: { userId: 1, startedAt: -1 }, name: 'idx_userId_startedAt' },
       { key: { startedAt: -1 }, name: 'idx_startedAt' }
     ]
+  },
+  {
+    collection: 'schedules',
+    indexes: [
+      { key: { userId: 1, startAt: 1 }, name: 'idx_userId_startAt' }
+    ]
   }
 ]
 

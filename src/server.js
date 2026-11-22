@@ -14,6 +14,7 @@ import socketIo from 'socket.io'
 import http from 'http'
 import { inviteUserToBoardSocket } from './sockets/inviteUserToBoardSocket'
 import { boardSocket, setSocketServerInstance } from './sockets/boardSocket'
+import { setScheduleSocketServerInstance } from './sockets/scheduleSocket'
 import { socketAuthMiddleware } from './sockets/socketAuthMiddleware'
 
 const START_SERVER = () => {
@@ -63,6 +64,8 @@ const START_SERVER = () => {
   const io = new socketIo.Server(server, { cors: corsOptions })
   // Đăng ký io instance cho service layer (vd: kick member bị remove khỏi board room)
   setSocketServerInstance(io)
+  // Đăng ký io instance cho schedule layer (bắn thay đổi bảng lịch tới phòng cá nhân user)
+  setScheduleSocketServerInstance(io)
   // Bắt buộc xác thực JWT ở bước handshake: connection không hợp lệ sẽ bị từ chối ngay
   io.use(socketAuthMiddleware)
   io.on('connection', (socket) => {

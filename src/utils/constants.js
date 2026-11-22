@@ -24,3 +24,13 @@ export const CARD_MEMBER_ACTION = {
   ADD: 'ADD',
   REMOVE: 'REMOVE'
 }
+
+// Màu hiển thị của entry trong bảng lịch (FE map key này sang palette tương ứng)
+export const SCHEDULE_ENTRY_COLORS = {
+  BLUE: 'blue',
+  ORANGE: 'orange',
+  GREEN: 'green',
+  PURPLE: 'purple',
+  RED: 'red',
+  PINK: 'pink'
+}

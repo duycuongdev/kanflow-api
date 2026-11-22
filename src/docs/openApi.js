@@ -52,7 +52,8 @@ export const openApiSpec = {
     { name: 'Columns', description: 'Column trong board' },
     { name: 'Cards', description: 'Card, comment, attachment, checklist' },
     { name: 'Invitations', description: 'Lời mời tham gia board' },
-    { name: 'Focus Sessions', description: 'Phiên focus (pomodoro): thống kê năng suất + bảng xếp hạng' }
+    { name: 'Focus Sessions', description: 'Phiên focus (pomodoro): thống kê năng suất + bảng xếp hạng' },
+    { name: 'Schedules', description: 'Bảng lịch cá nhân: entry vào khung giờ, gắn được card' }
   ],
   components: {
     securitySchemes: { bearerAuth, cookieAuth },
@@ -486,6 +487,39 @@ export const openApiSpec = {
           { name: 'to', in: 'query', required: true, schema: { type: 'integer' } }
         ],
         responses: { 200: okResponse('{ top: [...], me: {...}, totalRankedUsers }'), 422: errorResponse('from/to không hợp lệ') }
+      }
+    },
+
+    '/v1/schedules': {
+      get: {
+        tags: ['Schedules'], summary: 'Entry lịch của user giao với khoảng from/to (epoch ms, range tối đa 35 ngày)',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        parameters: [
+          { name: 'from', in: 'query', required: true, schema: { type: 'integer' } },
+          { name: 'to', in: 'query', required: true, schema: { type: 'integer' } }
+        ],
+        responses: { 200: okResponse('Danh sách entry (sắp xếp theo startAt tăng dần)'), 422: errorResponse('from/to không hợp lệ') }
+      },
+      post: {
+        tags: ['Schedules'], summary: 'Tạo entry lịch (title, startAt, endAt, màu, gắn được card/board - phải là member của board)',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['title', 'startAt', 'endAt'], properties: { title: { type: 'string' }, description: { type: 'string' }, startAt: { type: 'integer', description: 'Epoch ms' }, endAt: { type: 'integer', description: 'Epoch ms, tối đa 24h sau startAt' }, colorKey: { type: 'string', enum: ['blue', 'orange', 'green', 'purple', 'red', 'pink'] }, cardId: { type: 'string' }, boardId: { type: 'string' }, cardTitle: { type: 'string' }, boardTitle: { type: 'string' } } } } } },
+        responses: { 201: okResponse('Entry đã tạo'), 403: errorResponse('Không có quyền truy cập board được gắn'), 422: errorResponse('Dữ liệu không hợp lệ') }
+      }
+    },
+    '/v1/schedules/{entryId}': {
+      put: {
+        tags: ['Schedules'], summary: 'Sửa entry lịch (chỉ chủ nhân)',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        parameters: [idParam('entryId')],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, startAt: { type: 'integer' }, endAt: { type: 'integer' }, colorKey: { type: 'string', enum: ['blue', 'orange', 'green', 'purple', 'red', 'pink'] }, cardId: { type: 'string', nullable: true }, boardId: { type: 'string', nullable: true } } } } } },
+        responses: { 200: okResponse('Entry đã cập nhật'), 404: errorResponse('Entry không tồn tại / không thuộc về bạn') }
+      },
+      delete: {
+        tags: ['Schedules'], summary: 'Xóa entry lịch (soft delete, chỉ chủ nhân)',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        parameters: [idParam('entryId')],
+        responses: { 200: okResponse('Entry đã xóa'), 404: errorResponse('Entry không tồn tại / không thuộc về bạn') }
       }
     }
   }

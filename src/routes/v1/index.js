@@ -7,6 +7,7 @@ import { cardRouter } from './cardRouter'
 import { userRoute } from './userRoute'
 import { invitationRoute } from './invitationRoute'
 import { focusSessionRoute } from './focusSessionRoute'
+import { scheduleRoute } from './scheduleRoute'
 import { aiRouter } from './aiRoute'
 import { GET_DB } from '~/config/mongodb'
 import { openApiSpec } from '~/docs/openApi'
@@ -69,6 +70,9 @@ Router.use('/invitations', invitationRoute )
 
 // focus session api (thống kê focus + bảng xếp hạng)
 Router.use('/focus-sessions', focusSessionRoute)
+
+// schedule api (bảng lịch cá nhân)
+Router.use('/schedules', scheduleRoute)
 
 // AI Assistant api
 Router.use('/ai', aiRouter)
