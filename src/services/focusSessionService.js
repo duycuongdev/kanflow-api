@@ -13,7 +13,14 @@ const createFocusSession = async (reqBody, userId) => {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'Focus session cannot start in the future!')
     }
 
+    if (!reqBody.endedAt || reqBody.endedAt <= reqBody.startedAt) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'endedAt must be greater than startedAt')
+    }
+
     const durationMs = reqBody.endedAt - reqBody.startedAt
+    if (durationMs < 60 * 1000 || durationMs > 4 * 60 * 60 * 1000) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid focus session duration: must be between 1 minute and 4 hours!')
+    }
 
     const newSessionData = {
       userId: userId.toString(),
@@ -61,9 +68,19 @@ const getLeaderboard = async (userId, from, to, page = 1) => {
     const totalPages = Math.max(1, Math.ceil(totalsPerUser.length / LEADERBOARD_LIMIT))
     const currentPage = Math.min(Math.max(1, Number(page) || 1), totalPages)
 
-    // Join thông tin user (chỉ lấy public fields) cho các user xuất hiện trong kỳ
-    const userIds = totalsPerUser.map(t => t._id)
-    const users = userIds.length > 0 ? await userModel.findManyByIds(userIds) : []
+    const pageStart = (currentPage - 1) * LEADERBOARD_LIMIT
+    const pageItems = totalsPerUser.slice(pageStart, pageStart + LEADERBOARD_LIMIT)
+
+    // Hạng của user hiện tại: số user có tổng cao hơn + 1 (nếu không có phiên nào trong kỳ thì hạng = null)
+    const myIndex = totalsPerUser.findIndex(t => t._id.toString() === userId.toString())
+
+    // Tối ưu hóa: Chỉ join thông tin user cho trang hiện tại + user hiện tại (tránh N+1 và bùng nổ RAM)
+    const userIdsSet = new Set(pageItems.map(item => item._id.toString()))
+    if (myIndex !== -1) {
+      userIdsSet.add(totalsPerUser[myIndex]._id.toString())
+    }
+    const userIdsToFetch = Array.from(userIdsSet)
+    const users = userIdsToFetch.length > 0 ? await userModel.findManyByIds(userIdsToFetch) : []
     const usersById = new Map(users.map(u => [u._id.toString(), u]))
 
     const toRankRow = (item, index) => {
@@ -78,11 +95,8 @@ const getLeaderboard = async (userId, from, to, page = 1) => {
       }
     }
 
-    const pageStart = (currentPage - 1) * LEADERBOARD_LIMIT
-    const top = totalsPerUser.slice(pageStart, pageStart + LEADERBOARD_LIMIT).map(toRankRow)
+    const top = pageItems.map((item, idx) => toRankRow(item, pageStart + idx))
 
-    // Hạng của user hiện tại: số user có tổng cao hơn + 1 (nếu không có phiên nào trong kỳ thì hạng = null)
-    const myIndex = totalsPerUser.findIndex(t => t._id.toString() === userId.toString())
     let me = null
     if (myIndex !== -1) {
       me = toRankRow(totalsPerUser[myIndex], myIndex)
