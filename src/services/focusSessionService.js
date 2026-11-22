@@ -50,13 +50,16 @@ const getMyFocusStats = async (userId, from, to) => {
 }
 
 /**
- * Bảng xếp hạng focus trong khoảng [from, to):
- * - top: LEADERBOARD_LIMIT user có tổng focus cao nhất (kèm displayName/avatar)
- * - me: hạng + tổng focus của user hiện tại (dù nằm ngoài top)
+ * Bảng xếp hạng focus trong khoảng [from, to), phân trang theo page (mỗi trang LEADERBOARD_LIMIT user):
+ * - top: các user của trang hiện tại (rank là hạng TOÀN CỤC, không theo trang)
+ * - me: hạng + tổng focus của user hiện tại (dù nằm ngoài các trang)
+ * - totalPages + hasMore để FE hiển thị navigation
  */
-const getLeaderboard = async (userId, from, to) => {
+const getLeaderboard = async (userId, from, to, page = 1) => {
   try {
     const totalsPerUser = await focusSessionModel.getTotalMsPerUserInRange(from, to)
+    const totalPages = Math.max(1, Math.ceil(totalsPerUser.length / LEADERBOARD_LIMIT))
+    const currentPage = Math.min(Math.max(1, Number(page) || 1), totalPages)
 
     // Join thông tin user (chỉ lấy public fields) cho các user xuất hiện trong kỳ
     const userIds = totalsPerUser.map(t => t._id)
@@ -75,7 +78,8 @@ const getLeaderboard = async (userId, from, to) => {
       }
     }
 
-    const top = totalsPerUser.slice(0, LEADERBOARD_LIMIT).map(toRankRow)
+    const pageStart = (currentPage - 1) * LEADERBOARD_LIMIT
+    const top = totalsPerUser.slice(pageStart, pageStart + LEADERBOARD_LIMIT).map(toRankRow)
 
     // Hạng của user hiện tại: số user có tổng cao hơn + 1 (nếu không có phiên nào trong kỳ thì hạng = null)
     const myIndex = totalsPerUser.findIndex(t => t._id.toString() === userId.toString())
@@ -94,7 +98,14 @@ const getLeaderboard = async (userId, from, to) => {
       }
     }
 
-    return { top, me, totalRankedUsers: totalsPerUser.length }
+    return {
+      top,
+      me,
+      totalRankedUsers: totalsPerUser.length,
+      page: currentPage,
+      totalPages,
+      hasMore: currentPage < totalPages
+    }
   } catch (error) {
     throw error
   }

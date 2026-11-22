@@ -45,7 +45,9 @@ const createNew = async (req, res, next) => {
 const rangeQuery = async (req, res, next) => {
   const queryCondition = Joi.object({
     from: Joi.number().integer().required(),
-    to: Joi.number().integer().required()
+    to: Joi.number().integer().required(),
+    // Chỉ leaderboard dùng: phân trang (mỗi trang 10 user)
+    page: Joi.number().integer().min(1).default(1).optional()
   })
 
   try {

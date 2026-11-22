@@ -484,9 +484,10 @@ export const openApiSpec = {
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         parameters: [
           { name: 'from', in: 'query', required: true, schema: { type: 'integer' } },
-          { name: 'to', in: 'query', required: true, schema: { type: 'integer' } }
+          { name: 'to', in: 'query', required: true, schema: { type: 'integer' } },
+          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } }
         ],
-        responses: { 200: okResponse('{ top: [...], me: {...}, totalRankedUsers }'), 422: errorResponse('from/to không hợp lệ') }
+        responses: { 200: okResponse('{ top: [...], me: {...}, totalRankedUsers, page, totalPages, hasMore }'), 422: errorResponse('from/to không hợp lệ') }
       }
     },
 

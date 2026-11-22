@@ -30,9 +30,9 @@ const getFocusStats = async (req, res, next) => {
 const getFocusLeaderboard = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded._id
-    const { from, to } = req.query
+    const { from, to, page } = req.query
 
-    const leaderboard = await focusSessionService.getLeaderboard(userId, Number(from), Number(to))
+    const leaderboard = await focusSessionService.getLeaderboard(userId, Number(from), Number(to), Number(page) || 1)
 
     res.status(StatusCodes.OK).json(leaderboard)
   } catch (error) {
