@@ -3,6 +3,7 @@ import { boardService } from '~/services/boardService'
 import { cardService } from '~/services/cardService'
 import { columnService } from '~/services/columnService'
 import { invitationService } from '~/services/invitationService'
+import { userModel } from '~/models/userModel'
 import { scheduleService } from '~/services/scheduleService'
 
 // Format epoch ms theo múi giờ của user (offset lấy từ localNowISO client gửi lên, vd '+07:00')
@@ -350,10 +351,47 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
         ? NEWLINE2 + '*(Không thể thực hiện do: ' + err.message + ')*'
         : NEWLINE2 + '*(Could not complete the action due to: ' + err.message + ')*'
     }
+  } else if (aiResult.action === 'ADD_CARD_MEMBER' && aiResult.payload?.cardTitle && aiResult.payload?.memberEmail) {
+    try {
+      if (!currentBoardId || !boardContext) throw new Error(noBoardMsg(language))
+      const card = (boardContext.columns || []).flatMap((col) => (col.cards || []).map((c) => ({ ...c, columnTitle: col.title }))).find((c) => c.title.toLowerCase() === String(aiResult.payload.cardTitle).toLowerCase())
+      if (!card) throw new Error('Card not found in the current board')
+      const memberUser = await userModel.findOneByEmail(String(aiResult.payload.memberEmail).trim().toLowerCase())
+      if (!memberUser) throw new Error('No user found with that email')
+      const isBoardMember = [...(boardContext.ownerIds || []), ...(boardContext.memberIds || [])].some((id) => id.toString() === memberUser._id.toString())
+      if (!isBoardMember) throw new Error('That user is not a member of this board yet - invite them to the board first')
+      const memberIds = (card.memberIds || []).map((id) => id.toString())
+      if (memberIds.includes(memberUser._id.toString())) throw new Error('That user is already a member of this card')
+      await cardService.update(card._id.toString(), { memberIds: [...memberIds, memberUser._id.toString()] }, undefined, { _id: userId })
+      actionResult = { type: 'CARD_MEMBER_ADDED', data: { cardId: card._id.toString(), cardTitle: card.title, memberEmail: memberUser.email, memberName: memberUser.displayName } }
+      aiResult.message += NEWLINE2 + (language === 'vi' ? '👥 Đã thêm ' + memberUser.displayName + ' vào card "' + card.title + '"' : '👥 Added ' + memberUser.displayName + ' to the card "' + card.title + '"')
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '*(Không thể thêm thành viên vào card do: ' + err.message + ')*'
+        : NEWLINE2 + '*(Could not add the card member due to: ' + err.message + ')*'
+    }
+  } else if (aiResult.action === 'REMOVE_CARD_MEMBER' && aiResult.payload?.cardTitle && aiResult.payload?.memberEmail) {
+    try {
+      if (!currentBoardId || !boardContext) throw new Error(noBoardMsg(language))
+      const card = (boardContext.columns || []).flatMap((col) => (col.cards || []).map((c) => ({ ...c, columnTitle: col.title }))).find((c) => c.title.toLowerCase() === String(aiResult.payload.cardTitle).toLowerCase())
+      if (!card) throw new Error('Card not found in the current board')
+      const memberUser = await userModel.findOneByEmail(String(aiResult.payload.memberEmail).trim().toLowerCase())
+      if (!memberUser) throw new Error('No user found with that email')
+      const memberIds = (card.memberIds || []).map((id) => id.toString())
+      if (!memberIds.includes(memberUser._id.toString())) throw new Error('That user is not a member of this card')
+      await cardService.update(card._id.toString(), { memberIds: memberIds.filter((id) => id !== memberUser._id.toString()) }, undefined, { _id: userId })
+      actionResult = { type: 'CARD_MEMBER_REMOVED', data: { cardId: card._id.toString(), cardTitle: card.title, memberEmail: memberUser.email, memberName: memberUser.displayName } }
+      aiResult.message += NEWLINE2 + (language === 'vi' ? '👤 Đã xóa ' + memberUser.displayName + ' khỏi card "' + card.title + '"' : '👤 Removed ' + memberUser.displayName + ' from the card "' + card.title + '"')
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '*(Không thể xóa thành viên khỏi card do: ' + err.message + ')*'
+        : NEWLINE2 + '*(Could not remove the card member due to: ' + err.message + ')*'
+    }
   }
 
   return {
     message: aiResult.message,
+
     action: aiResult.action,
     actionResult
   }

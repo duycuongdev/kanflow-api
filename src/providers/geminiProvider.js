@@ -143,6 +143,8 @@ CURRENT ACTIVE BOARD:
 - Description: "${boardContext.description || 'None'}"
 - Columns & Tasks:
 ${colsSummary || 'No columns'}
+- Board Members (name <email>):
+${(boardContext.members || []).map((m) => `- ${m.displayName || m.email} <${m.email}>`).join('\n') || 'No members'}
 `
   }
 
@@ -226,6 +228,14 @@ Capabilities & Actions:
    payload: { "boardTitle": "optional board title from USER BOARDS; defaults to CURRENT ACTIVE BOARD" }
 14. "REOPEN_BOARD": Reopen a closed board.
    payload: { "boardTitle": "board title from USER BOARDS" }
+15. "ADD_CARD_MEMBER": When user asks to add a user/person/member to a CARD. The user must be a member of the board - match their name to the Board Members list above and copy their email EXACTLY. Copy the card title EXACTLY from board context. If the person they name is NOT in the Board Members list, respond with action null explaining that person is not a member of the board yet and suggest INVITE_MEMBER first.
+   payload: { "cardTitle": "exact card title from board context", "memberEmail": "exact email from Board Members list" }
+16. "REMOVE_CARD_MEMBER": When user asks to remove a person from a card. Same matching rules as ADD_CARD_MEMBER.
+   payload: { "cardTitle": "exact card title from board context", "memberEmail": "exact email from Board Members list" }
+17. General Conversation / Advice / Task Breakdown / Summary:
+   When user asks a question, requests advice, says hi, or wants a summary.
+   "action": null, "payload": null.
+   payload: { "boardTitle": "board title from USER BOARDS" }
 15. General Conversation / Advice / Task Breakdown / Summary:
    When user asks a question, requests advice, says hi, or wants a summary.
    "action": null, "payload": null.
@@ -234,7 +244,7 @@ Output Rules:
 You MUST ALWAYS respond with valid JSON matching this schema:
 {
   "message": "Friendly, helpful markdown response to display to the user in chat",
-  "action": null | "CREATE_BOARD" | "CREATE_COLUMN" | "CREATE_CARD" | "CREATE_SCHEDULE" | "UPDATE_CARD_DUE_DATE" | "UPDATE_COLUMN_TITLE" | "ARCHIVE_COLUMN" | "RESTORE_COLUMN" | "UPDATE_CARD" | "ARCHIVE_CARD" | "RESTORE_CARD" | "INVITE_MEMBER" | "CLOSE_BOARD" | "REOPEN_BOARD",
+  "action": null | "CREATE_BOARD" | "CREATE_COLUMN" | "CREATE_CARD" | "CREATE_SCHEDULE" | "UPDATE_CARD_DUE_DATE" | "UPDATE_COLUMN_TITLE" | "ARCHIVE_COLUMN" | "RESTORE_COLUMN" | "UPDATE_CARD" | "ARCHIVE_CARD" | "RESTORE_CARD" | "INVITE_MEMBER" | "CLOSE_BOARD" | "REOPEN_BOARD" | "ADD_CARD_MEMBER" | "REMOVE_CARD_MEMBER",
   "payload": null | object
 }`
 
