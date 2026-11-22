@@ -208,7 +208,25 @@ Capabilities & Actions:
        { "title": "exact card title from board context", "dueDateISO": "ISO 8601 datetime WITH UTC offset, e.g. '2026-11-23T18:00:00+07:00'" }
      ]
    }
-6. General Conversation / Advice / Task Breakdown / Summary:
+6. "UPDATE_COLUMN_TITLE": Rename a column of the CURRENT ACTIVE BOARD.
+   payload: { "columnTitle": "current column title from board context", "newTitle": "new title" }
+7. "ARCHIVE_COLUMN": Archive (hide) a column of the CURRENT ACTIVE BOARD - reversible, nothing is deleted.
+   payload: { "columnTitle": "column title to archive" }
+8. "RESTORE_COLUMN": Restore a previously archived column of the CURRENT ACTIVE BOARD.
+   payload: { "columnTitle": "archived column title to restore" }
+9. "UPDATE_CARD": Update the title and/or description of an EXISTING card of the CURRENT ACTIVE BOARD. Copy the card title EXACTLY from board context. Include ONLY the fields the user wants changed.
+   payload: { "cardTitle": "current card title from board context", "newTitle": "optional new title", "newDescription": "optional new description" }
+10. "ARCHIVE_CARD": Archive (hide) a card of the CURRENT ACTIVE BOARD - reversible, nothing is deleted.
+   payload: { "cardTitle": "card title to archive" }
+11. "RESTORE_CARD": Restore a previously archived card of the CURRENT ACTIVE BOARD.
+   payload: { "cardTitle": "archived card title to restore" }
+12. "INVITE_MEMBER": Invite a person to a board by email. Defaults to the CURRENT ACTIVE BOARD, or the board the user names from USER BOARDS.
+   payload: { "inviteeEmail": "the email address to invite", "boardTitle": "optional board title from USER BOARDS" }
+13. "CLOSE_BOARD": Close (archive) a board - it can be reopened later, nothing is deleted.
+   payload: { "boardTitle": "optional board title from USER BOARDS; defaults to CURRENT ACTIVE BOARD" }
+14. "REOPEN_BOARD": Reopen a closed board.
+   payload: { "boardTitle": "board title from USER BOARDS" }
+15. General Conversation / Advice / Task Breakdown / Summary:
    When user asks a question, requests advice, says hi, or wants a summary.
    "action": null, "payload": null.
 
@@ -216,7 +234,7 @@ Output Rules:
 You MUST ALWAYS respond with valid JSON matching this schema:
 {
   "message": "Friendly, helpful markdown response to display to the user in chat",
-  "action": null | "CREATE_BOARD" | "CREATE_COLUMN" | "CREATE_CARD" | "CREATE_SCHEDULE" | "UPDATE_CARD_DUE_DATE",
+  "action": null | "CREATE_BOARD" | "CREATE_COLUMN" | "CREATE_CARD" | "CREATE_SCHEDULE" | "UPDATE_CARD_DUE_DATE" | "UPDATE_COLUMN_TITLE" | "ARCHIVE_COLUMN" | "RESTORE_COLUMN" | "UPDATE_CARD" | "ARCHIVE_CARD" | "RESTORE_CARD" | "INVITE_MEMBER" | "CLOSE_BOARD" | "REOPEN_BOARD",
   "payload": null | object
 }`
 
