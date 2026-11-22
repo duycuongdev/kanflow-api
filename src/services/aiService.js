@@ -2,8 +2,9 @@ import { geminiProvider } from '~/providers/geminiProvider'
 import { boardService } from '~/services/boardService'
 import { columnService } from '~/services/columnService'
 import { cardService } from '~/services/cardService'
+import { scheduleService } from '~/services/scheduleService'
 
-const chat = async (userId, { message, history = [], currentBoardId = null, language = 'vi', customApiKey = '', attachments = [] }) => {
+const chat = async (userId, { message, history = [], currentBoardId = null, language = 'vi', customApiKey = '', attachments = [], localNowISO = null }) => {
   let boardContext = null
   if (currentBoardId) {
     try {
@@ -19,7 +20,8 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
     boardContext,
     language,
     customApiKey,
-    attachments
+    attachments,
+    localNowISO
   })
 
   let actionResult = null
@@ -82,6 +84,35 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
       aiResult.message += language === 'vi'
         ? `\n\n*(Lưu ý: Không thể tự động tạo thẻ do: ${err.message})*`
         : `\n\n*(Note: Could not automatically create card due to: ${err.message})*`
+    }
+  } else if (aiResult.action === 'CREATE_SCHEDULE' && aiResult.payload?.title) {
+    try {
+      const startAt = Date.parse(aiResult.payload.startAtISO)
+      const endAt = Date.parse(aiResult.payload.endAtISO)
+
+      if (Number.isNaN(startAt) || Number.isNaN(endAt)) {
+        throw new Error('Invalid schedule datetime (startAtISO/endAtISO)')
+      }
+      if (endAt <= startAt) {
+        throw new Error('Schedule end time must be after start time')
+      }
+
+      const createdEntry = await scheduleService.createNewEntry(userId, {
+        title: aiResult.payload.title,
+        description: aiResult.payload.description || '',
+        startAt,
+        endAt,
+        colorKey: aiResult.payload.colorKey
+      })
+
+      actionResult = {
+        type: 'SCHEDULE_CREATED',
+        data: createdEntry
+      }
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? `\n\n*(Lưu ý: Không thể tự động tạo lịch do: ${err.message})*`
+        : `\n\n*(Note: Could not automatically create schedule due to: ${err.message})*`
     }
   }
 

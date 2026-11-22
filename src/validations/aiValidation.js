@@ -21,6 +21,8 @@ const chat = async (req, res, next) => {
     currentBoardId: Joi.string().allow('', null).optional(),
     language: Joi.string().valid('vi', 'en').default('vi').optional(),
     customApiKey: Joi.string().allow('', null).optional(),
+    // Thời điểm hiện tại theo giờ máy client (ISO 8601) - để AI giải mã các mốc thời gian tương đối
+    localNowISO: Joi.string().allow('', null).optional().max(64),
     attachments: Joi.array().items(
       Joi.object({
         name: Joi.string().allow('', null).optional(),

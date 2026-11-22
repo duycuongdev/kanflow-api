@@ -113,7 +113,8 @@ const chatWithCopilot = async ({
   boardContext = null,
   language = 'vi',
   customApiKey = '',
-  attachments = []
+  attachments = [],
+  localNowISO = null
 }) => {
   const apiKey = (customApiKey || env.GEMINI_API_KEY || '').trim()
 
@@ -144,6 +145,12 @@ CURRENT ACTIVE BOARD:
 ${colsSummary || 'No columns'}
 `
   }
+
+  const nowContextText = localNowISO
+    ? `CURRENT USER LOCAL DATE/TIME: ${localNowISO}
+Use this as the reference "now" to resolve relative dates in the user's request (e.g. "ngày mai" = tomorrow, "tuần sau" = next week, "9h" = 09:00 local time). Always output schedule dates in ISO 8601 WITH the user's UTC offset (e.g. "2026-11-23T09:00:00+07:00").
+`
+    : ''
 
   const systemInstruction = `You are Kanflow Assistant, an intelligent AI Assistant and Project Manager built into Kanflow (a real-time Kanban & Agile collaboration platform).
 Your mission is to help users manage their workspaces, design boards, plan agile workflows, add cards, suggest tasks, summarize progress, and answer productivity questions.
@@ -187,7 +194,15 @@ Capabilities & Actions:
      "labels": [{ "title": "Tag name", "color": "#hex" }],
      "checklists": [{ "title": "Checklist", "items": [{ "title": "Subtask", "isDone": false }] }]
    }
-4. General Conversation / Advice / Task Breakdown / Summary:
+4. "CREATE_SCHEDULE": When user asks to schedule / plan a personal calendar entry (lịch cá nhân), e.g. "cho học React vào ngày mai 9h-11h", "nhắc họp team thứ 3 tuần sau 14h", "đặt lịch ôn tập tối nay".
+   payload: {
+     "title": "short schedule title (max 120 chars)",
+     "startAtISO": "ISO 8601 datetime WITH UTC offset, e.g. '2026-11-23T09:00:00+07:00'",
+     "endAtISO": "ISO 8601 datetime WITH UTC offset, must be after startAtISO, max 24h duration",
+     "colorKey": "one of: blue | orange | green | purple | red | pink (pick a sensible one)",
+     "description": "optional short note (max 2000 chars)"
+   }
+5. General Conversation / Advice / Task Breakdown / Summary:
    When user asks a question, requests advice, says hi, or wants a summary.
    "action": null, "payload": null.
 
@@ -195,7 +210,7 @@ Output Rules:
 You MUST ALWAYS respond with valid JSON matching this schema:
 {
   "message": "Friendly, helpful markdown response to display to the user in chat",
-  "action": null | "CREATE_BOARD" | "CREATE_COLUMN" | "CREATE_CARD",
+  "action": null | "CREATE_BOARD" | "CREATE_COLUMN" | "CREATE_CARD" | "CREATE_SCHEDULE",
   "payload": null | object
 }`
 
@@ -213,7 +228,7 @@ You MUST ALWAYS respond with valid JSON matching this schema:
     }
   }
 
-  const currentTurnText = `${systemInstruction}\n${boardContextText}\nUser Message: ${message}`
+  const currentTurnText = `${systemInstruction}\n${nowContextText}${boardContextText}\nUser Message: ${message}`
   const userParts = [{ text: currentTurnText }]
 
   if (Array.isArray(attachments)) {
