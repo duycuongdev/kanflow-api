@@ -314,7 +314,7 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
         ? NEWLINE2 + '*(Không thể thực hiện do: ' + err.message + ')*'
         : NEWLINE2 + '*(Could not complete the action due to: ' + err.message + ')*'
     }
-  } else if (aiResult.action === 'CLOSE_BOARD' && aiResult.payload?.boardTitle || currentBoardId) {
+  } else if (aiResult.action === 'CLOSE_BOARD' && (aiResult.payload?.boardTitle || currentBoardId)) {
     try {
       let boardIdToClose = currentBoardId
       let boardTitleToClose = boardContext?.title || null
@@ -325,9 +325,14 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
         boardTitleToClose = resolved.board.title
       }
       if (!boardIdToClose) throw new Error(noBoardMsg(language))
-      await boardService.closeBoard(userId, boardIdToClose)
-      actionResult = { type: 'BOARD_CLOSED', data: { _id: boardIdToClose, title: boardTitleToClose } }
-      aiResult.message += NEWLINE2 + (language === 'vi' ? '🔒 Đã đóng bảng "' + (boardTitleToClose || '') + '" (có thể mở lại)' : '🔒 Board "' + (boardTitleToClose || '') + '" closed (reopenable)')
+      // KHÔNG tự đóng: trả về xác nhận để user bấm nút trên UI (tránh AI đóng nhầm bảng đang mở)
+      actionResult = {
+        type: 'BOARD_CLOSE_CONFIRMATION',
+        data: { _id: boardIdToClose, title: boardTitleToClose }
+      }
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '⚠️ Bấm nút bên dưới để xác nhận đóng bảng (có thể mở lại sau).'
+        : NEWLINE2 + '⚠️ Click the button below to confirm closing the board (reopenable).'
     } catch (err) {
       aiResult.message += language === 'vi'
         ? NEWLINE2 + '*(Không thể thực hiện do: ' + err.message + ')*'
