@@ -1,8 +1,11 @@
+import dayjs from 'dayjs'
 import { geminiProvider } from '~/providers/geminiProvider'
 import { boardService } from '~/services/boardService'
 import { columnService } from '~/services/columnService'
 import { cardService } from '~/services/cardService'
 import { scheduleService } from '~/services/scheduleService'
+
+const dayjsFmt = (epochMs) => dayjs(epochMs).format('DD/MM/YYYY HH:mm')
 
 const chat = async (userId, { message, history = [], currentBoardId = null, language = 'vi', customApiKey = '', attachments = [], localNowISO = null }) => {
   let boardContext = null
@@ -113,6 +116,64 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
       aiResult.message += language === 'vi'
         ? `\n\n*(Lưu ý: Không thể tự động tạo lịch do: ${err.message})*`
         : `\n\n*(Note: Could not automatically create schedule due to: ${err.message})*`
+    }
+  } else if (aiResult.action === 'UPDATE_CARD_DUE_DATE' && Array.isArray(aiResult.payload?.updates) && aiResult.payload.updates.length > 0) {
+    try {
+      // Chỉ thao tác trên board đang mở: user phải là owner/member của board chứa card (cardService.update tự kiểm tra IDOR)
+      if (!currentBoardId || !boardContext) {
+        throw new Error(language === 'vi'
+          ? 'Bạn cần mở một bảng trước khi đặt hạn chót cho card.'
+          : 'Open a board first before setting card deadlines.')
+      }
+
+      // Gom card của board theo title (case-insensitive) từ boardContext
+      const boardCards = (boardContext.columns || [])
+        .flatMap((col) => (col.cards || []).map((c) => ({ ...c, columnTitle: col.title })))
+
+      const updated = []
+      const notFound = []
+      const invalidDates = []
+
+      for (const upd of aiResult.payload.updates) {
+        const title = String(upd.title || '').trim()
+        const dueDate = Date.parse(upd.dueDateISO)
+        if (!title) continue
+        if (Number.isNaN(dueDate)) {
+          invalidDates.push(title)
+          continue
+        }
+        const card = boardCards.find((c) => c.title.toLowerCase() === title.toLowerCase())
+        if (!card) {
+          notFound.push(title)
+          continue
+        }
+        await cardService.update(card._id.toString(), { dueDate }, undefined, { _id: userId })
+        updated.push({ title: card.title, dueDate, columnTitle: card.columnTitle })
+      }
+
+      let summary = language === 'vi'
+        ? `\n\n📅 Đã đặt hạn chót cho ${updated.length} card: ${updated.map((u) => '"' + u.title + '" -> ' + dayjsFmt(u.dueDate)).join(', ')}`
+        : `\n\n📅 Due dates set for ${updated.length} cards: ${updated.map((u) => '"' + u.title + '" -> ' + dayjsFmt(u.dueDate)).join(', ')}`
+      if (notFound.length > 0) {
+        summary += language === 'vi'
+          ? '. Không tìm thấy: ' + notFound.join(', ')
+          : '. Not found: ' + notFound.join(', ')
+      }
+      if (invalidDates.length > 0) {
+        summary += language === 'vi'
+          ? '. Ngày không hợp lệ: ' + invalidDates.join(', ')
+          : '. Invalid dates: ' + invalidDates.join(', ')
+      }
+      aiResult.message += summary
+
+      actionResult = {
+        type: 'CARDS_DUE_DATE_UPDATED',
+        data: { updatedCount: updated.length, updated, notFound, invalidDates }
+      }
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? `\n\n*(Lưu ý: Không thể đặt hạn chót do: ${err.message})*`
+        : `\n\n*(Note: Could not set due dates due to: ${err.message})*`
     }
   }
 

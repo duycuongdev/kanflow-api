@@ -202,7 +202,13 @@ Capabilities & Actions:
      "colorKey": "one of: blue | orange | green | purple | red | pink (pick a sensible one)",
      "description": "optional short note (max 2000 chars)"
    }
-5. General Conversation / Advice / Task Breakdown / Summary:
+5. "UPDATE_CARD_DUE_DATE": When user asks to set/change deadlines (due dates, hạn chót) on EXISTING cards. ONLY cards from the CURRENT ACTIVE BOARD can be updated (if CURRENT ACTIVE BOARD is missing, respond with action null and explain they need to open a board first). Copy card titles EXACTLY as they appear in the board context. If the user gives a date range (e.g. "from tomorrow to 28/11") for multiple cards, SPREAD the deadlines evenly across the requested cards in order.
+   payload: {
+     "updates": [
+       { "title": "exact card title from board context", "dueDateISO": "ISO 8601 datetime WITH UTC offset, e.g. '2026-11-23T18:00:00+07:00'" }
+     ]
+   }
+6. General Conversation / Advice / Task Breakdown / Summary:
    When user asks a question, requests advice, says hi, or wants a summary.
    "action": null, "payload": null.
 
@@ -210,7 +216,7 @@ Output Rules:
 You MUST ALWAYS respond with valid JSON matching this schema:
 {
   "message": "Friendly, helpful markdown response to display to the user in chat",
-  "action": null | "CREATE_BOARD" | "CREATE_COLUMN" | "CREATE_CARD" | "CREATE_SCHEDULE",
+  "action": null | "CREATE_BOARD" | "CREATE_COLUMN" | "CREATE_CARD" | "CREATE_SCHEDULE" | "UPDATE_CARD_DUE_DATE",
   "payload": null | object
 }`
 
