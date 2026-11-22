@@ -1,11 +1,23 @@
-import dayjs from 'dayjs'
 import { geminiProvider } from '~/providers/geminiProvider'
 import { boardService } from '~/services/boardService'
 import { columnService } from '~/services/columnService'
 import { cardService } from '~/services/cardService'
 import { scheduleService } from '~/services/scheduleService'
 
-const dayjsFmt = (epochMs) => dayjs(epochMs).format('DD/MM/YYYY HH:mm')
+// Format epoch ms theo múi giờ của user (offset lấy từ localNowISO client gửi lên, vd '+07:00')
+const dayjsFmt = (epochMs, offsetMinutes = 0) => {
+  const d = new Date(epochMs + offsetMinutes * 60000)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+}
+
+// Đọc offset phút từ chuỗi localNowISO (vd '2026-11-22T17:30:00+07:00' -> 420)
+const tzOffsetMinutesFrom = (localNowISO) => {
+  const m = String(localNowISO || '').match(/([+-])(\d{2}):?(\d{2})\s*$/)
+  if (!m) return 0
+  const value = parseInt(m[2], 10) * 60 + parseInt(m[3], 10)
+  return m[1] === '-' ? -value : value
+}
 
 const chat = async (userId, { message, history = [], currentBoardId = null, language = 'vi', customApiKey = '', attachments = [], localNowISO = null }) => {
   let boardContext = null
@@ -16,6 +28,8 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
       boardContext = null
     }
   }
+
+  const offsetMinutes = tzOffsetMinutesFrom(localNowISO)
 
   const aiResult = await geminiProvider.chatWithCopilot({
     message,
@@ -152,8 +166,8 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
       }
 
       let summary = language === 'vi'
-        ? `\n\n📅 Đã đặt hạn chót cho ${updated.length} card: ${updated.map((u) => '"' + u.title + '" -> ' + dayjsFmt(u.dueDate)).join(', ')}`
-        : `\n\n📅 Due dates set for ${updated.length} cards: ${updated.map((u) => '"' + u.title + '" -> ' + dayjsFmt(u.dueDate)).join(', ')}`
+        ? `\n\n📅 Đã đặt hạn chót cho ${updated.length} card: ${updated.map((u) => '"' + u.title + '" -> ' + dayjsFmt(u.dueDate, offsetMinutes)).join(', ')}`
+        : `\n\n📅 Due dates set for ${updated.length} cards: ${updated.map((u) => '"' + u.title + '" -> ' + dayjsFmt(u.dueDate, offsetMinutes)).join(', ')}`
       if (notFound.length > 0) {
         summary += language === 'vi'
           ? '. Không tìm thấy: ' + notFound.join(', ')
