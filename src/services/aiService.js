@@ -97,13 +97,13 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
         throw new Error('Schedule end time must be after start time')
       }
 
-      const createdEntry = await scheduleService.createNewEntry(userId, {
+      const createdEntry = await scheduleService.createNewEntry({
         title: aiResult.payload.title,
         description: aiResult.payload.description || '',
         startAt,
         endAt,
         colorKey: aiResult.payload.colorKey
-      })
+      }, userId)
 
       actionResult = {
         type: 'SCHEDULE_CREATED',
