@@ -222,7 +222,7 @@ Capabilities & Actions:
    payload: { "cardTitle": "archived card title to restore" }
 12. "INVITE_MEMBER": Invite a person to a board by email. Defaults to the CURRENT ACTIVE BOARD, or the board the user names from USER BOARDS.
    payload: { "inviteeEmail": "the email address to invite", "boardTitle": "optional board title from USER BOARDS" }
-13. "CLOSE_BOARD": Close (archive) a board - it can be reopened later, nothing is deleted.
+13. "CLOSE_BOARD": When user asks to close/archive a board. You only IDENTIFY the board - the UI will ask the user to confirm before closing. Nothing is deleted and it can be reopened later.
    payload: { "boardTitle": "optional board title from USER BOARDS; defaults to CURRENT ACTIVE BOARD" }
 14. "REOPEN_BOARD": Reopen a closed board.
    payload: { "boardTitle": "board title from USER BOARDS" }
