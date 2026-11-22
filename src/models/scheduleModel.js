@@ -119,6 +119,14 @@ const update = async (entryId, userId, updateData, { session } = {}) => {
       updateData.boardId = updateData.boardId ? new ObjectId(updateData.boardId) : null
     }
 
+    // Chuẩn hóa startAt và endAt luôn là Date object trong MongoDB để khớp với schema và range query
+    if (updateData.startAt !== undefined) {
+      updateData.startAt = new Date(updateData.startAt)
+    }
+    if (updateData.endAt !== undefined) {
+      updateData.endAt = new Date(updateData.endAt)
+    }
+
     const result = await GET_DB().collection(SCHEDULE_COLLECTION_NAME).findOneAndUpdate(
       { _id: new ObjectId(entryId), userId: new ObjectId(userId), _destroy: false },
       { $set: { ...updateData, updatedAt: Date.now() } },
