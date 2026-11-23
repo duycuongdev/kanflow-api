@@ -5,6 +5,11 @@ import { columnService } from '~/services/columnService'
 import { invitationService } from '~/services/invitationService'
 import { userModel } from '~/models/userModel'
 import { scheduleService } from '~/services/scheduleService'
+import { GET_DB } from '~/config/mongodb'
+import { ObjectId } from 'mongodb'
+import { randomUUID } from 'crypto'
+
+const escapeRegex = (string) => String(string || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // Format epoch ms theo múi giờ của user (offset lấy từ localNowISO client gửi lên, vd '+07:00')
 const NEWLINE2 = '\n\n'
@@ -62,7 +67,14 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
 
   let actionResult = null
 
-  if (aiResult.action === 'CREATE_BOARD' && aiResult.payload?.title) {
+  // CRITICAL SAFETY GUARD: Board permanent deletion is strictly forbidden via AI
+  if (aiResult.action === 'DELETE_BOARD') {
+    actionResult = null
+    aiResult.action = null
+    aiResult.message = (language === 'vi'
+      ? '⚠️ **Quy tắc an toàn hệ thống**: Kanflow Assistant không hỗ trợ thao tác xóa bảng vĩnh viễn nhằm bảo vệ an toàn tuyệt đối cho dữ liệu dự án của bạn. Thao tác xóa vĩnh viễn bảng chỉ có thể thực hiện thủ công bởi Chủ sở hữu (Owner) trong phần Cài đặt bảng.\n\nNếu muốn tạm ẩn bảng khỏi giao diện làm việc mà vẫn bảo toàn 100% dữ liệu để có thể mở lại bất cứ lúc nào, bạn có muốn tôi giúp bạn **Đóng bảng** (Close Board) không?'
+      : '⚠️ **System Safety Policy**: Kanflow Assistant cannot permanently delete boards in order to protect project data against irreversible loss. Permanent deletion must be executed manually by the Board Owner in Board Settings.\n\nIf you want to hide this board while preserving 100% of data (reopenable anytime), would you like me to **Close the board** instead?')
+  } else if (aiResult.action === 'CREATE_BOARD' && aiResult.payload?.title) {
     try {
       const createdBoard = await boardService.importBoard(userId, aiResult.payload)
       actionResult = {
@@ -466,6 +478,315 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
       aiResult.message += language === 'vi'
         ? NEWLINE2 + '*(Không thể xóa thành viên khỏi card do: ' + err.message + ')*'
         : NEWLINE2 + '*(Could not remove the card member due to: ' + err.message + ')*'
+    }
+  } else if (aiResult.action === 'UPDATE_BOARD' && (aiResult.payload?.newTitle || aiResult.payload?.newDescription !== undefined)) {
+    try {
+      if (!currentBoardId || !boardContext) throw new Error(noBoardMsg(language))
+      const updateData = {}
+      if (aiResult.payload.newTitle) updateData.title = String(aiResult.payload.newTitle).trim()
+      if (aiResult.payload.newDescription !== undefined) updateData.description = String(aiResult.payload.newDescription)
+      if (Object.keys(updateData).length === 0) throw new Error('Nothing to update')
+
+      const updatedBoard = await boardService.update(userId, currentBoardId, updateData)
+      actionResult = {
+        type: 'BOARD_UPDATED',
+        data: updatedBoard
+      }
+      aiResult.message += NEWLINE2 + (language === 'vi'
+        ? `📋 Đã cập nhật thông tin bảng "${updatedBoard.title || boardContext.title}" thành công.`
+        : `📋 Successfully updated board "${updatedBoard.title || boardContext.title}".`)
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '*(Không thể cập nhật bảng do: ' + err.message + ')*'
+        : NEWLINE2 + '*(Could not update board due to: ' + err.message + ')*'
+    }
+  } else if (aiResult.action === 'DELETE_COLUMN' && aiResult.payload?.columnTitle) {
+    try {
+      if (!currentBoardId || !boardContext) throw new Error(noBoardMsg(language))
+      const column = (boardContext.columns || []).find((c) => c.title.toLowerCase() === String(aiResult.payload.columnTitle).toLowerCase().trim())
+      if (!column) throw new Error('Column not found in the current board')
+      await columnService.deleteItem(userId, column._id.toString())
+      actionResult = { type: 'COLUMN_DELETED', data: { columnId: column._id.toString(), title: column.title } }
+      aiResult.message += NEWLINE2 + (language === 'vi'
+        ? `🗑️ Đã xóa vĩnh viễn cột "${column.title}" và các thẻ bên trong.`
+        : `🗑️ Column "${column.title}" and its cards were permanently deleted.`)
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '*(Không thể xóa cột do: ' + err.message + ')*'
+        : NEWLINE2 + '*(Could not delete column due to: ' + err.message + ')*'
+    }
+  } else if (aiResult.action === 'MOVE_CARD' && aiResult.payload?.targetColumnTitle) {
+    try {
+      if (!currentBoardId || !boardContext) throw new Error(noBoardMsg(language))
+      const targetColName = String(aiResult.payload.targetColumnTitle).trim().toLowerCase()
+      const targetColumn = (boardContext.columns || []).find((c) => {
+        const t = c.title.toLowerCase()
+        return t === targetColName || t.includes(targetColName) || targetColName.includes(t)
+      })
+      if (!targetColumn) throw new Error('Target column not found in the current board')
+
+      const isAll = String(aiResult.payload.cardTitle || '').trim().toLowerCase() === 'all' ||
+                    String(aiResult.payload.cardTitle || '').trim().toLowerCase() === 'toàn bộ' ||
+                    String(aiResult.payload.cardTitle || '').trim().toLowerCase() === 'tất cả' ||
+                    String(aiResult.payload.cardTitle || '').trim() === '*'
+
+      let cardsToMove = []
+      if (isAll && aiResult.payload.sourceColumnTitle) {
+        const srcColName = String(aiResult.payload.sourceColumnTitle).trim().toLowerCase()
+        const srcCol = (boardContext.columns || []).find((c) => {
+          const t = c.title.toLowerCase()
+          return t === srcColName || t.includes(srcColName) || srcColName.includes(t)
+        })
+        if (srcCol) {
+          cardsToMove = (srcCol.cards || []).map(c => ({ card: c, sourceColumn: srcCol }))
+        }
+      } else if (Array.isArray(aiResult.payload.cardTitles) && aiResult.payload.cardTitles.length > 0) {
+        for (const t of aiResult.payload.cardTitles) {
+          const tLower = String(t).trim().toLowerCase()
+          const found = (boardContext.columns || []).flatMap(col => (col.cards || []).map(c => ({ card: c, sourceColumn: col }))).find(item => {
+            const ct = item.card.title.toLowerCase()
+            return ct === tLower || ct.includes(tLower) || tLower.includes(ct)
+          })
+          if (found) cardsToMove.push(found)
+        }
+      } else if (aiResult.payload.cardTitle) {
+        const cardTitleLower = String(aiResult.payload.cardTitle).trim().toLowerCase()
+        const found = (boardContext.columns || []).flatMap(col => (col.cards || []).map(c => ({ card: c, sourceColumn: col }))).find(item => {
+          const ct = item.card.title.toLowerCase()
+          return ct === cardTitleLower || ct.includes(cardTitleLower) || cardTitleLower.includes(ct)
+        })
+        if (found) cardsToMove.push(found)
+      }
+
+      if (cardsToMove.length === 0) throw new Error('No matching cards found to move')
+
+      const colOrderMap = {}
+      boardContext.columns.forEach(col => {
+        colOrderMap[col._id.toString()] = [...(col.cardOrderIds || []).map(id => id.toString())]
+      })
+
+      const movedCards = []
+      for (const { card, sourceColumn } of cardsToMove) {
+        if (sourceColumn._id.toString() === targetColumn._id.toString()) continue
+
+        const prevColId = sourceColumn._id.toString()
+        const nextColId = targetColumn._id.toString()
+
+        colOrderMap[prevColId] = colOrderMap[prevColId].filter(id => id !== card._id.toString())
+        colOrderMap[nextColId] = [...colOrderMap[nextColId].filter(id => id !== card._id.toString()), card._id.toString()]
+
+        await boardService.moveCardToDifferentColumn(userId, {
+          currentCardId: card._id.toString(),
+          prevColumnId: prevColId,
+          prevCardOrderIds: colOrderMap[prevColId],
+          nextColumnId: nextColId,
+          nextCardOrderIds: colOrderMap[nextColId]
+        })
+        movedCards.push(card.title)
+      }
+
+      actionResult = {
+        type: 'CARD_MOVED',
+        data: { movedCount: movedCards.length, cards: movedCards, targetColumnTitle: targetColumn.title }
+      }
+      aiResult.message += NEWLINE2 + (language === 'vi'
+        ? `🔄 Đã chuyển ${movedCards.length} thẻ (${movedCards.join(', ')}) sang cột "${targetColumn.title}".`
+        : `🔄 Moved ${movedCards.length} card(s) (${movedCards.join(', ')}) to column "${targetColumn.title}".`)
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '*(Không thể di chuyển thẻ do: ' + err.message + ')*'
+        : NEWLINE2 + '*(Could not move card due to: ' + err.message + ')*'
+    }
+  } else if (aiResult.action === 'DELETE_CARD' && aiResult.payload?.cardTitle) {
+    try {
+      if (!currentBoardId || !boardContext) throw new Error(noBoardMsg(language))
+      const cardTitleLower = String(aiResult.payload.cardTitle).trim().toLowerCase()
+      const card = (boardContext.columns || []).flatMap((col) => (col.cards || [])).find((c) => {
+        const ct = c.title.toLowerCase()
+        return ct === cardTitleLower || ct.includes(cardTitleLower) || cardTitleLower.includes(ct)
+      })
+      if (!card) throw new Error('Card not found in the current board')
+      await cardService.deleteItem(card._id.toString(), userId)
+      actionResult = { type: 'CARD_DELETED', data: { cardId: card._id.toString(), title: card.title } }
+      aiResult.message += NEWLINE2 + (language === 'vi'
+        ? `🗑️ Đã xóa vĩnh viễn thẻ "${card.title}".`
+        : `🗑️ Card "${card.title}" was permanently deleted.`)
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '*(Không thể xóa thẻ do: ' + err.message + ')*'
+        : NEWLINE2 + '*(Could not delete card due to: ' + err.message + ')*'
+    }
+  } else if (aiResult.action === 'ADD_CARD_LABEL' && aiResult.payload?.cardTitle) {
+    try {
+      if (!currentBoardId || !boardContext) throw new Error(noBoardMsg(language))
+      const cardTitleLower = String(aiResult.payload.cardTitle).trim().toLowerCase()
+      const card = (boardContext.columns || []).flatMap((col) => (col.cards || [])).find((c) => {
+        const ct = c.title.toLowerCase()
+        return ct === cardTitleLower || ct.includes(cardTitleLower) || cardTitleLower.includes(ct)
+      })
+      if (!card) throw new Error('Card not found in the current board')
+
+      let labelsToAdd = []
+      if (Array.isArray(aiResult.payload.labels)) {
+        labelsToAdd = aiResult.payload.labels.map(l => ({
+          title: String(l.title || '').trim(),
+          color: String(l.color || '#0052cc').trim()
+        }))
+      } else if (aiResult.payload.labelTitle || aiResult.payload.color) {
+        labelsToAdd = [{
+          title: String(aiResult.payload.labelTitle || '').trim(),
+          color: String(aiResult.payload.color || '#0052cc').trim()
+        }]
+      }
+      if (labelsToAdd.length === 0) throw new Error('No label data provided')
+
+      const existing = card.labels || []
+      const merged = [...existing]
+      for (const l of labelsToAdd) {
+        if (!merged.some(el => el.title === l.title && el.color === l.color)) {
+          merged.push(l)
+        }
+      }
+
+      await cardService.update(card._id.toString(), { labels: merged }, undefined, { _id: userId })
+      actionResult = { type: 'CARD_LABEL_ADDED', data: { cardId: card._id.toString(), cardTitle: card.title, labels: merged } }
+      aiResult.message += NEWLINE2 + (language === 'vi'
+        ? `🏷️ Đã gắn nhãn (${labelsToAdd.map(l => l.title || l.color).join(', ')}) vào thẻ "${card.title}".`
+        : `🏷️ Added label(s) (${labelsToAdd.map(l => l.title || l.color).join(', ')}) to card "${card.title}".`)
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '*(Không thể thêm nhãn do: ' + err.message + ')*'
+        : NEWLINE2 + '*(Could not add label due to: ' + err.message + ')*'
+    }
+  } else if (aiResult.action === 'ADD_CHECKLIST' && aiResult.payload?.cardTitle) {
+    try {
+      if (!currentBoardId || !boardContext) throw new Error(noBoardMsg(language))
+      const cardTitleLower = String(aiResult.payload.cardTitle).trim().toLowerCase()
+      const card = (boardContext.columns || []).flatMap((col) => (col.cards || [])).find((c) => {
+        const ct = c.title.toLowerCase()
+        return ct === cardTitleLower || ct.includes(cardTitleLower) || cardTitleLower.includes(ct)
+      })
+      if (!card) throw new Error('Card not found in the current board')
+
+      const clTitle = String(aiResult.payload.checklistTitle || (language === 'vi' ? 'Checklist công việc' : 'Checklist')).trim()
+      const rawItems = Array.isArray(aiResult.payload.items) ? aiResult.payload.items : []
+      const items = rawItems.map(it => {
+        if (typeof it === 'string') {
+          return { _id: randomUUID(), title: it.trim(), isDone: false, memberIds: [], attachments: [] }
+        }
+        return {
+          _id: randomUUID(),
+          title: String(it.title || '').trim(),
+          isDone: Boolean(it.isDone),
+          memberIds: [],
+          attachments: []
+        }
+      }).filter(it => it.title)
+
+      const newChecklist = {
+        _id: randomUUID(),
+        title: clTitle,
+        memberIds: [],
+        items
+      }
+
+      const updatedChecklists = [...(card.checklists || []), newChecklist]
+      await cardService.update(card._id.toString(), { checklists: updatedChecklists }, undefined, { _id: userId })
+      actionResult = { type: 'CHECKLIST_ADDED', data: { cardId: card._id.toString(), cardTitle: card.title, checklist: newChecklist } }
+      aiResult.message += NEWLINE2 + (language === 'vi'
+        ? `✅ Đã thêm checklist "${clTitle}" với ${items.length} mục vào thẻ "${card.title}".`
+        : `✅ Added checklist "${clTitle}" with ${items.length} item(s) to card "${card.title}".`)
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '*(Không thể thêm checklist do: ' + err.message + ')*'
+        : NEWLINE2 + '*(Could not add checklist due to: ' + err.message + ')*'
+    }
+  } else if (aiResult.action === 'CHECK_CHECKLIST_ITEM' && aiResult.payload?.cardTitle && aiResult.payload?.itemTitle) {
+    try {
+      if (!currentBoardId || !boardContext) throw new Error(noBoardMsg(language))
+      const cardTitleLower = String(aiResult.payload.cardTitle).trim().toLowerCase()
+      const card = (boardContext.columns || []).flatMap((col) => (col.cards || [])).find((c) => {
+        const ct = c.title.toLowerCase()
+        return ct === cardTitleLower || ct.includes(cardTitleLower) || cardTitleLower.includes(ct)
+      })
+      if (!card) throw new Error('Card not found in the current board')
+
+      const targetItemName = String(aiResult.payload.itemTitle).trim().toLowerCase()
+      const targetStatus = aiResult.payload.isDone !== false
+      let found = false
+      let foundTitle = ''
+
+      const updatedChecklists = (card.checklists || []).map(cl => ({
+        ...cl,
+        items: (cl.items || []).map(it => {
+          const itTitle = String(it.title || '').trim().toLowerCase()
+          if (itTitle === targetItemName || itTitle.includes(targetItemName) || targetItemName.includes(itTitle)) {
+            found = true
+            foundTitle = it.title
+            return { ...it, isDone: targetStatus }
+          }
+          return it
+        })
+      }))
+
+      if (!found) throw new Error(`Subtask item "${aiResult.payload.itemTitle}" not found in card checklists`)
+
+      await cardService.update(card._id.toString(), { checklists: updatedChecklists }, undefined, { _id: userId })
+      actionResult = { type: 'CHECKLIST_ITEM_UPDATED', data: { cardId: card._id.toString(), cardTitle: card.title, itemTitle: foundTitle, isDone: targetStatus } }
+      aiResult.message += NEWLINE2 + (language === 'vi'
+        ? `✔️ Đã đánh dấu ${targetStatus ? 'hoàn thành' : 'chưa hoàn thành'} mục "${foundTitle}" trong thẻ "${card.title}".`
+        : `✔️ Marked item "${foundTitle}" as ${targetStatus ? 'completed' : 'uncompleted'} in card "${card.title}".`)
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '*(Không thể cập nhật mục checklist do: ' + err.message + ')*'
+        : NEWLINE2 + '*(Could not update checklist item due to: ' + err.message + ')*'
+    }
+  } else if (aiResult.action === 'ADD_CARD_COMMENT' && aiResult.payload?.cardTitle && aiResult.payload?.content) {
+    try {
+      if (!currentBoardId || !boardContext) throw new Error(noBoardMsg(language))
+      const cardTitleLower = String(aiResult.payload.cardTitle).trim().toLowerCase()
+      const card = (boardContext.columns || []).flatMap((col) => (col.cards || [])).find((c) => {
+        const ct = c.title.toLowerCase()
+        return ct === cardTitleLower || ct.includes(cardTitleLower) || cardTitleLower.includes(ct)
+      })
+      if (!card) throw new Error('Card not found in the current board')
+
+      const commentContent = String(aiResult.payload.content).trim()
+      if (!commentContent) throw new Error('Comment content is empty')
+
+      const currentUser = await userModel.findOneById(userId)
+      if (!currentUser) throw new Error('User not found')
+
+      await cardService.update(card._id.toString(), { commentToAdd: { content: commentContent } }, undefined, currentUser)
+      actionResult = { type: 'CARD_COMMENT_ADDED', data: { cardId: card._id.toString(), cardTitle: card.title, content: commentContent } }
+      aiResult.message += NEWLINE2 + (language === 'vi'
+        ? `💬 Đã thêm bình luận vào thẻ "${card.title}".`
+        : `💬 Added comment to card "${card.title}".`)
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '*(Không thể thêm bình luận do: ' + err.message + ')*'
+        : NEWLINE2 + '*(Could not add comment due to: ' + err.message + ')*'
+    }
+  } else if (aiResult.action === 'DELETE_SCHEDULE' && aiResult.payload?.scheduleTitle) {
+    try {
+      const rawTitle = String(aiResult.payload.scheduleTitle).trim()
+      const regexPattern = escapeRegex(rawTitle)
+      const entry = await GET_DB().collection('schedules').findOne({
+        userId: new ObjectId(userId),
+        _destroy: { $ne: true },
+        title: { $regex: new RegExp(regexPattern, 'i') }
+      })
+      if (!entry) throw new Error(language === 'vi' ? 'Không tìm thấy lịch có tiêu đề tương ứng' : 'Schedule event not found')
+
+      await scheduleService.deleteEntry(userId, entry._id.toString())
+      actionResult = { type: 'SCHEDULE_DELETED', data: { _id: entry._id.toString(), title: entry.title } }
+      aiResult.message += NEWLINE2 + (language === 'vi'
+        ? `🗑️ Đã xóa sự kiện lịch "${entry.title}".`
+        : `🗑️ Deleted schedule event "${entry.title}".`)
+    } catch (err) {
+      aiResult.message += language === 'vi'
+        ? NEWLINE2 + '*(Không thể xóa lịch do: ' + err.message + ')*'
+        : NEWLINE2 + '*(Could not delete schedule due to: ' + err.message + ')*'
     }
   }
 
