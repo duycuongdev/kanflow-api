@@ -150,43 +150,123 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
         ? `\n\n*(Lưu ý: Không thể tự động tạo lịch do: ${err.message})*`
         : `\n\n*(Note: Could not automatically create schedule due to: ${err.message})*`
     }
-  } else if (aiResult.action === 'UPDATE_CARD_DUE_DATE' && Array.isArray(aiResult.payload?.updates) && aiResult.payload.updates.length > 0) {
+  } else if ((aiResult.action === 'UPDATE_CARD_DUE_DATE' || aiResult.action === 'UPDATE_CARD_REMINDER') && aiResult.payload) {
     try {
       // Chỉ thao tác trên board đang mở: user phải là owner/member của board chứa card (cardService.update tự kiểm tra IDOR)
       if (!currentBoardId || !boardContext) {
         throw new Error(language === 'vi'
-          ? 'Bạn cần mở một bảng trước khi đặt hạn chót cho card.'
-          : 'Open a board first before setting card deadlines.')
+          ? 'Bạn cần mở một bảng trước khi đặt hạn chót hoặc nhắc nhở cho card.'
+          : 'Open a board first before setting card deadlines or reminders.')
       }
 
       // Gom card của board theo title (case-insensitive) từ boardContext
       const boardCards = (boardContext.columns || [])
         .flatMap((col) => (col.cards || []).map((c) => ({ ...c, columnTitle: col.title })))
 
+      let rawUpdates = []
+      const payload = aiResult.payload
+
+      // 1. Trường hợp payload có updates mảng
+      if (Array.isArray(payload.updates) && payload.updates.length > 0) {
+        const isAllCardsFlag = payload.updates.some(u => {
+          const t = String(u.title || '').trim().toLowerCase()
+          return t === 'all' || t === '*' || t === 'all cards' || t === 'all card' || t === 'tất cả' || t === 'toàn bộ'
+        })
+        if (isAllCardsFlag) {
+          const allItem = payload.updates.find(u => {
+            const t = String(u.title || '').trim().toLowerCase()
+            return t === 'all' || t === '*' || t === 'all cards' || t === 'all card' || t === 'tất cả' || t === 'toàn bộ'
+          })
+          rawUpdates = boardCards.map(c => ({
+            title: c.title,
+            dueDateISO: allItem?.dueDateISO,
+            reminderMinutes: allItem?.reminderMinutes !== undefined ? allItem.reminderMinutes : payload.reminderMinutes
+          }))
+        } else {
+          rawUpdates = payload.updates
+        }
+      }
+      // 2. Trường hợp payload có allCards = true hoặc cardTitles bao gồm "all" / "*" / null
+      else if (payload.allCards === true || payload.cardTitles?.includes('all') || payload.cardTitles?.includes('*') || (!payload.cardTitles && payload.reminderMinutes !== undefined)) {
+        rawUpdates = boardCards.map(c => ({
+          title: c.title,
+          reminderMinutes: payload.reminderMinutes,
+          dueDateISO: payload.dueDateISO
+        }))
+      }
+      // 3. Trường hợp payload có cardTitles là mảng các title cụ thể
+      else if (Array.isArray(payload.cardTitles)) {
+        rawUpdates = payload.cardTitles.map(t => ({
+          title: t,
+          reminderMinutes: payload.reminderMinutes,
+          dueDateISO: payload.dueDateISO
+        }))
+      }
+
       const updated = []
       const notFound = []
       const invalidDates = []
 
-      for (const upd of aiResult.payload.updates) {
+      for (const upd of rawUpdates) {
         const title = String(upd.title || '').trim()
-        const dueDate = Date.parse(upd.dueDateISO)
         if (!title) continue
-        if (Number.isNaN(dueDate)) {
-          invalidDates.push(title)
-          continue
-        }
         const card = boardCards.find((c) => c.title.toLowerCase() === title.toLowerCase())
         if (!card) {
           notFound.push(title)
           continue
         }
-        await cardService.update(card._id.toString(), { dueDate }, undefined, { _id: userId })
-        updated.push({ title: card.title, dueDate, columnTitle: card.columnTitle })
+
+        const updateData = {}
+        if (upd.dueDateISO) {
+          const dueDate = Date.parse(upd.dueDateISO)
+          if (Number.isNaN(dueDate)) {
+            invalidDates.push(title)
+            continue
+          }
+          updateData.dueDate = dueDate
+        }
+
+        if (upd.reminderMinutes !== undefined) {
+          updateData.reminderMinutes = (upd.reminderMinutes === null || upd.reminderMinutes === -1)
+            ? null
+            : Number(upd.reminderMinutes)
+        }
+
+        if (Object.keys(updateData).length === 0) continue
+
+        await cardService.update(card._id.toString(), updateData, undefined, { _id: userId })
+        updated.push({
+          title: card.title,
+          dueDate: updateData.dueDate || card.dueDate,
+          reminderMinutes: updateData.reminderMinutes !== undefined ? updateData.reminderMinutes : card.reminderMinutes,
+          columnTitle: card.columnTitle
+        })
       }
 
-      let summary = language === 'vi'
-        ? `\n\n📅 Đã đặt hạn chót cho ${updated.length} card: ${updated.map((u) => '"' + u.title + '" -> ' + dayjsFmt(u.dueDate, offsetMinutes)).join(', ')}`
-        : `\n\n📅 Due dates set for ${updated.length} cards: ${updated.map((u) => '"' + u.title + '" -> ' + dayjsFmt(u.dueDate, offsetMinutes)).join(', ')}`
+      const reminderDesc = (mins) => {
+        if (mins === null || mins === -1) return language === 'vi' ? 'tắt nhắc' : 'no reminder'
+        if (mins === 0) return language === 'vi' ? 'đúng giờ' : 'at due time'
+        if (mins < 60) return language === 'vi' ? `trước ${mins} phút` : `${mins}m before`
+        if (mins < 1440) return language === 'vi' ? `trước ${mins / 60} giờ` : `${mins / 60}h before`
+        return language === 'vi' ? `trước ${mins / 1440} ngày` : `${mins / 1440}d before`
+      }
+
+      let summary = ''
+      if (updated.length > 0) {
+        const details = updated.map((u) => {
+          let s = `"${u.title}"`
+          const parts = []
+          if (u.dueDate) parts.push(dayjsFmt(u.dueDate, offsetMinutes))
+          if (u.reminderMinutes !== undefined) parts.push(reminderDesc(u.reminderMinutes))
+          if (parts.length > 0) s += ` (${parts.join(', ')})`
+          return s
+        }).join(', ')
+
+        summary = language === 'vi'
+          ? `\n\n⏰ Đã cập nhật hạn chót / nhắc nhở cho ${updated.length} card: ${details}`
+          : `\n\n⏰ Updated due date / reminder for ${updated.length} cards: ${details}`
+      }
+
       if (notFound.length > 0) {
         summary += language === 'vi'
           ? '. Không tìm thấy: ' + notFound.join(', ')
@@ -205,8 +285,8 @@ const chat = async (userId, { message, history = [], currentBoardId = null, lang
       }
     } catch (err) {
       aiResult.message += language === 'vi'
-        ? `\n\n*(Lưu ý: Không thể đặt hạn chót do: ${err.message})*`
-        : `\n\n*(Note: Could not set due dates due to: ${err.message})*`
+        ? `\n\n*(Lưu ý: Không thể cập nhật do: ${err.message})*`
+        : `\n\n*(Note: Could not update due dates/reminders due to: ${err.message})*`
     }
   } else if (aiResult.action === 'UPDATE_COLUMN_TITLE' && aiResult.payload?.columnTitle && aiResult.payload?.newTitle) {
     try {

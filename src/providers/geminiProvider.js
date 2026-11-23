@@ -132,7 +132,17 @@ const chatWithCopilot = async ({
   let boardContextText = ''
   if (boardContext && boardContext.title) {
     const colsSummary = (boardContext.columns || []).map(col => {
-      const cardsList = (col.cards || []).slice(0, 10).map(card => card.title).join(', ')
+      const cardsList = (col.cards || []).slice(0, 30).map(card => {
+        let cardStr = `"${card.title}"`
+        if (card.dueDate) {
+          const dueStr = new Date(card.dueDate).toISOString()
+          const remStr = (card.reminderMinutes !== null && card.reminderMinutes !== undefined)
+            ? `${card.reminderMinutes}m`
+            : 'none'
+          cardStr += ` [DueDate: ${dueStr}, Reminder: ${remStr}]`
+        }
+        return cardStr
+      }).join(', ')
       return `Column "${col.title}" (id: "${col._id}"): [${cardsList || 'No cards'}]`
     }).join('\n')
 
@@ -204,10 +214,13 @@ Capabilities & Actions:
      "colorKey": "one of: blue | orange | green | purple | red | pink (pick a sensible one)",
      "description": "optional short note (max 2000 chars)"
    }
-5. "UPDATE_CARD_DUE_DATE": When user asks to set/change deadlines (due dates, hạn chót) on EXISTING cards. ONLY cards from the CURRENT ACTIVE BOARD can be updated (if CURRENT ACTIVE BOARD is missing, respond with action null and explain they need to open a board first). Copy card titles EXACTLY as they appear in the board context. If the user gives a date range (e.g. "from tomorrow to 28/11") for multiple cards, SPREAD the deadlines evenly across the requested cards in order.
+5. "UPDATE_CARD_DUE_DATE": When user asks to set/change deadlines (due dates, hạn chót) and/or reminder notifications (nhắc nhở trước hạn chót) on EXISTING cards. ONLY cards from the CURRENT ACTIVE BOARD can be updated (if CURRENT ACTIVE BOARD is missing, respond with action null and explain they need to open a board first). Copy card titles EXACTLY as they appear in the board context. If the user gives a date range (e.g. "from tomorrow to 28/11") for multiple cards, SPREAD the deadlines evenly across the requested cards in order.
+   - "dueDateISO": optional if card already has a due date and user only wants to change reminder.
+   - "reminderMinutes": integer minutes before due date (0 = at due time, 10 = 10m before, 60 = 1h before, 120 = 2h before, 1440 = 1d before, 2880 = 2d before, null = none).
+   - If user asks for "all cards", "entire of card", "tất cả các thẻ", include ALL cards from the board context in updates array!
    payload: {
      "updates": [
-       { "title": "exact card title from board context", "dueDateISO": "ISO 8601 datetime WITH UTC offset, e.g. '2026-11-23T18:00:00+07:00'" }
+       { "title": "exact card title from board context", "dueDateISO": "optional ISO 8601 datetime WITH UTC offset, e.g. '2026-11-23T18:00:00+07:00'", "reminderMinutes": 120 }
      ]
    }
 6. "UPDATE_COLUMN_TITLE": Rename a column of the CURRENT ACTIVE BOARD.
@@ -232,11 +245,17 @@ Capabilities & Actions:
    payload: { "cardTitle": "exact card title from board context", "memberEmail": "exact email from Board Members list" }
 16. "REMOVE_CARD_MEMBER": When user asks to remove a person from a card. Same matching rules as ADD_CARD_MEMBER.
    payload: { "cardTitle": "exact card title from board context", "memberEmail": "exact email from Board Members list" }
-17. General Conversation / Advice / Task Breakdown / Summary:
-   When user asks a question, requests advice, says hi, or wants a summary.
-   "action": null, "payload": null.
-   payload: { "boardTitle": "board title from USER BOARDS" }
-15. General Conversation / Advice / Task Breakdown / Summary:
+17. "UPDATE_CARD_REMINDER": When user asks specifically to set or update reminders for cards (e.g. "update reminder entire of card before 2 hours", "nhắc trước 2 tiếng cho toàn bộ thẻ", "set reminder 1 hour before").
+   - "reminderMinutes": integer minutes before due date (0 = at due date, 10 = 10m before, 60 = 1h before, 120 = 2h before, 1440 = 1d before, 2880 = 2d before, null = none).
+   - "allCards": boolean (set true if user says "all card", "entire of card", "tất cả các thẻ").
+   - "cardTitles": optional array of card titles.
+   - NOTE: If cards already have due dates (visible in board context as [DueDate: ...]), DO NOT ask the user for a date and time! Set the reminderMinutes immediately.
+   payload: {
+     "reminderMinutes": 120,
+     "allCards": true,
+     "cardTitles": ["exact card title 1", "exact card title 2"]
+   }
+18. General Conversation / Advice / Task Breakdown / Summary:
    When user asks a question, requests advice, says hi, or wants a summary.
    "action": null, "payload": null.
 
@@ -244,7 +263,7 @@ Output Rules:
 You MUST ALWAYS respond with valid JSON matching this schema:
 {
   "message": "Friendly, helpful markdown response to display to the user in chat",
-  "action": null | "CREATE_BOARD" | "CREATE_COLUMN" | "CREATE_CARD" | "CREATE_SCHEDULE" | "UPDATE_CARD_DUE_DATE" | "UPDATE_COLUMN_TITLE" | "ARCHIVE_COLUMN" | "RESTORE_COLUMN" | "UPDATE_CARD" | "ARCHIVE_CARD" | "RESTORE_CARD" | "INVITE_MEMBER" | "CLOSE_BOARD" | "REOPEN_BOARD" | "ADD_CARD_MEMBER" | "REMOVE_CARD_MEMBER",
+  "action": null | "CREATE_BOARD" | "CREATE_COLUMN" | "CREATE_CARD" | "CREATE_SCHEDULE" | "UPDATE_CARD_DUE_DATE" | "UPDATE_CARD_REMINDER" | "UPDATE_COLUMN_TITLE" | "ARCHIVE_COLUMN" | "RESTORE_COLUMN" | "UPDATE_CARD" | "ARCHIVE_CARD" | "RESTORE_CARD" | "INVITE_MEMBER" | "CLOSE_BOARD" | "REOPEN_BOARD" | "ADD_CARD_MEMBER" | "REMOVE_CARD_MEMBER",
   "payload": null | object
 }`
 
