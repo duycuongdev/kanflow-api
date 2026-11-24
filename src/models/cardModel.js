@@ -295,10 +295,30 @@ const findDueCardsByUser = async (userId) => {
         $match: {
           'board.0._destroy': { $ne: true },
           $or: [
+            // 1. User được gán trực tiếp vào Card
             { memberIds: userObjectId },
-            { memberIds: userId.toString() }
-
-
+            { memberIds: userId.toString() },
+            // 2. User là Chủ sở hữu (Owner) của Board
+            { 'board.0.ownerIds': userObjectId },
+            { 'board.0.ownerIds': userId.toString() },
+            // 3. User là Thành viên (Member) của Board VÀ Card chưa gán cho ai (unassigned)
+            {
+              $and: [
+                {
+                  $or: [
+                    { 'board.0.memberIds': userObjectId },
+                    { 'board.0.memberIds': userId.toString() }
+                  ]
+                },
+                {
+                  $or: [
+                    { memberIds: { $exists: false } },
+                    { memberIds: { $size: 0 } },
+                    { memberIds: null }
+                  ]
+                }
+              ]
+            }
           ]
         }
       }

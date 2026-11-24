@@ -49,6 +49,22 @@ const update = async (cardId, reqBody, cardCoverFile, userInfo) => {
       updatedAt: Date.now()
     }
 
+    // Tự động đồng bộ trạng thái hoàn thành hạn chót (isDueDateComplete) khi checklist đạt 100% hoặc bị bỏ tick
+    if (Array.isArray(updateData.checklists) && updateData.isDueDateComplete === undefined) {
+      const targetDueDate = updateData.dueDate !== undefined ? updateData.dueDate : currentCard?.dueDate
+      if (targetDueDate) {
+        const totalItems = updateData.checklists.reduce((sum, cl) => sum + (cl.items?.length || 0), 0)
+        const completedItems = updateData.checklists.reduce((sum, cl) => sum + (cl.items?.filter(i => i.isDone).length || 0), 0)
+        if (totalItems > 0) {
+          if (completedItems === totalItems && !currentCard.isDueDateComplete) {
+            updateData.isDueDateComplete = true
+          } else if (completedItems < totalItems && currentCard.isDueDateComplete) {
+            updateData.isDueDateComplete = false
+          }
+        }
+      }
+    }
+
     let updatedCard = {}
 
     if (cardCoverFile) {
